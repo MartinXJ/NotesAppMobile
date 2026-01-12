@@ -8,6 +8,7 @@ import '../../data/models/sermon_note.dart';
 import '../../data/models/journal_note.dart';
 import '../../data/models/enums.dart';
 import '../widgets/note_card.dart';
+import 'note_editor_screen.dart';
 
 /// Home screen displaying the notes list
 class HomeScreen extends StatefulWidget {
@@ -143,6 +144,85 @@ class _NotesListViewState extends State<NotesListView> {
     _loadNotes();
   }
 
+  Future<void> _navigateToEditor({int? noteId, NoteType? noteType, bool isSermon = false}) async {
+    final result = await Navigator.of(context).push(
+      PlatformUtils.isIOS
+          ? CupertinoPageRoute(
+              builder: (context) => NoteEditorScreen(
+                noteId: noteId,
+                initialNoteType: noteType,
+                isSermon: isSermon,
+              ),
+            )
+          : MaterialPageRoute(
+              builder: (context) => NoteEditorScreen(
+                noteId: noteId,
+                initialNoteType: noteType,
+                isSermon: isSermon,
+              ),
+            ),
+    );
+    
+    // Reload notes if a note was saved
+    if (result == true) {
+      _loadNotes();
+    }
+  }
+
+  void _showNoteTypeDialog() {
+    if (PlatformUtils.isIOS) {
+      showCupertinoModalPopup(
+        context: context,
+        builder: (context) => CupertinoActionSheet(
+          title: const Text('Choose Note Type'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
+              },
+              child: const Text('Sermon Note'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.journal, isSermon: false);
+              },
+              child: const Text('Journal Note'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('Choose Note Type'),
+          children: [
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
+              },
+              child: const Text('Sermon Note'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.journal, isSermon: false);
+              },
+              child: const Text('Journal Note'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   String _getPreview(String content) {
     // Extract plain text preview from content (first 100 chars)
     if (content.isEmpty) return 'No content';
@@ -271,9 +351,11 @@ class _NotesListViewState extends State<NotesListView> {
                                   colorHex: note.colorHex,
                                   tags: note.tags,
                                   noteType: NoteType.sermon,
-                                  onTap: () {
-                                    // TODO: Navigate to note editor
-                                  },
+                                  onTap: () => _navigateToEditor(
+                                    noteId: note.id,
+                                    noteType: NoteType.sermon,
+                                    isSermon: true,
+                                  ),
                                 );
                               } else if (note is JournalNote) {
                                 return NoteCard(
@@ -284,9 +366,11 @@ class _NotesListViewState extends State<NotesListView> {
                                   colorHex: note.colorHex,
                                   tags: note.tags,
                                   noteType: NoteType.journal,
-                                  onTap: () {
-                                    // TODO: Navigate to note editor
-                                  },
+                                  onTap: () => _navigateToEditor(
+                                    noteId: note.id,
+                                    noteType: NoteType.journal,
+                                    isSermon: false,
+                                  ),
                                 );
                               }
                               
@@ -344,9 +428,11 @@ class _NotesListViewState extends State<NotesListView> {
                               colorHex: note.colorHex,
                               tags: note.tags,
                               noteType: NoteType.sermon,
-                              onTap: () {
-                                // TODO: Navigate to note editor
-                              },
+                              onTap: () => _navigateToEditor(
+                                noteId: note.id,
+                                noteType: NoteType.sermon,
+                                isSermon: true,
+                              ),
                             );
                           } else if (note is JournalNote) {
                             return NoteCard(
@@ -357,9 +443,11 @@ class _NotesListViewState extends State<NotesListView> {
                               colorHex: note.colorHex,
                               tags: note.tags,
                               noteType: NoteType.journal,
-                              onTap: () {
-                                // TODO: Navigate to note editor
-                              },
+                              onTap: () => _navigateToEditor(
+                                noteId: note.id,
+                                noteType: NoteType.journal,
+                                isSermon: false,
+                              ),
                             );
                           }
                           
@@ -370,9 +458,7 @@ class _NotesListViewState extends State<NotesListView> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Navigate to note editor
-        },
+        onPressed: _showNoteTypeDialog,
         child: const Icon(Icons.add),
       ),
     );
