@@ -4,8 +4,14 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/cupertino_theme.dart';
 import 'core/utils/platform_utils.dart';
 import 'presentation/screens/home_screen.dart';
+import 'data/database/isar_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Isar database
+  await IsarService.getInstance();
+  
   runApp(const NotesApp());
 }
 
