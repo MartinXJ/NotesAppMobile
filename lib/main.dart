@@ -7,6 +7,8 @@ import 'core/utils/platform_utils.dart';
 import 'presentation/screens/home_screen.dart';
 import 'data/database/isar_service.dart';
 import 'domain/services/theme_service.dart';
+import 'domain/repositories/notes_repository.dart';
+import 'data/repositories/notes_repository_impl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,8 +17,11 @@ void main() async {
   await IsarService.getInstance();
   
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeService(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeService()),
+        Provider<NotesRepository>(create: (_) => NotesRepositoryImpl()),
+      ],
       child: const NotesApp(),
     ),
   );

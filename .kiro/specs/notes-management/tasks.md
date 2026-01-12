@@ -124,13 +124,13 @@ The implementation prioritizes offline-first functionality, establishing local d
     - Display note metadata (title, date, tags)
     - _Requirements: 1.3, 7.4, 16.5_
 
-  - [ ] 7.2 Implement note type filtering UI
+  - [x] 7.2 Implement note type filtering UI
     - Add filter chips for note types
     - Connect to FilterService
     - Update list based on selected filters
     - _Requirements: 1.4, 10.1_
 
-  - [ ] 7.3 Write integration tests for notes list
+  - [x] 7.3 Write integration tests for notes list
     - Test note display
     - Test filtering interaction
     - _Requirements: 1.3, 10.1_
