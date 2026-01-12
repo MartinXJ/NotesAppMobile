@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
 import '../../core/utils/platform_utils.dart';
+import '../../domain/services/theme_service.dart';
+import '../../data/models/enums.dart';
 
 /// Home screen displaying the notes list
 class HomeScreen extends StatefulWidget {
@@ -230,9 +233,7 @@ class SettingsView extends StatelessWidget {
                   CupertinoListTile(
                     title: const Text('Theme'),
                     trailing: const CupertinoListTileChevron(),
-                    onTap: () {
-                      // TODO: Navigate to theme settings
-                    },
+                    onTap: () => _showThemeDialog(context),
                   ),
                 ],
               ),
@@ -264,9 +265,7 @@ class SettingsView extends StatelessWidget {
             leading: const Icon(Icons.palette),
             title: const Text('Theme'),
             subtitle: const Text('Light, Dark, or System'),
-            onTap: () {
-              // TODO: Navigate to theme settings
-            },
+            onTap: () => _showThemeDialog(context),
           ),
           const Divider(),
           ListTile(
@@ -280,5 +279,75 @@ class SettingsView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    final themeService = Provider.of<ThemeService>(context, listen: false);
+
+    if (PlatformUtils.isIOS) {
+      showCupertinoModalPopup(
+        context: context,
+        builder: (context) => CupertinoActionSheet(
+          title: const Text('Choose Theme'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.light);
+                Navigator.pop(context);
+              },
+              child: const Text('Light'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.dark);
+                Navigator.pop(context);
+              },
+              child: const Text('Dark'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.system);
+                Navigator.pop(context);
+              },
+              child: const Text('System'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('Choose Theme'),
+          children: [
+            SimpleDialogOption(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.light);
+                Navigator.pop(context);
+              },
+              child: const Text('Light'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.dark);
+                Navigator.pop(context);
+              },
+              child: const Text('Dark'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                themeService.setThemeMode(AppThemeMode.system);
+                Navigator.pop(context);
+              },
+              child: const Text('System'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
