@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/cupertino_theme.dart';
 import 'core/utils/platform_utils.dart';
@@ -52,6 +54,13 @@ class NotesApp extends StatelessWidget {
       themeMode: themeService.flutterThemeMode,
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: FlutterQuillLocalizations.supportedLocales,
     );
   }
 }

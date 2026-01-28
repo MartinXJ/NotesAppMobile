@@ -43,6 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Gradle
+.gradle/
 
 # Generated files
 *.g.dart
@@ -51,3 +55,10 @@ app.*.map.json
 
 # Local configuration
 local.properties
+
+# Flutter auto-generated files
+.metadata
+.flutter-plugins-dependencies
+
+# DevTools
+devtools_options.yaml

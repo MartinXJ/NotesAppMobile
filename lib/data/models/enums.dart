@@ -1,7 +1,7 @@
 /// Type of note
 enum NoteType {
-  sermon,
   journal,
+  sermon,
 }
 
 /// Type of media attachment

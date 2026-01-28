@@ -174,21 +174,21 @@ class _NotesListViewState extends State<NotesListView> {
       showCupertinoModalPopup(
         context: context,
         builder: (context) => CupertinoActionSheet(
-          title: const Text('Choose Note Type'),
+          title: const Text('Add Note'),
           actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
-              },
-              child: const Text('Sermon Note'),
-            ),
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.pop(context);
                 _navigateToEditor(noteType: NoteType.journal, isSermon: false);
               },
               child: const Text('Journal Note'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
+              },
+              child: const Text('Sermon Note'),
             ),
           ],
           cancelButton: CupertinoActionSheetAction(
@@ -201,21 +201,21 @@ class _NotesListViewState extends State<NotesListView> {
       showDialog(
         context: context,
         builder: (context) => SimpleDialog(
-          title: const Text('Choose Note Type'),
+          title: const Text('Add Note'),
           children: [
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
-              },
-              child: const Text('Sermon Note'),
-            ),
             SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(context);
                 _navigateToEditor(noteType: NoteType.journal, isSermon: false);
               },
               child: const Text('Journal Note'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
+              },
+              child: const Text('Sermon Note'),
             ),
           ],
         ),
@@ -237,9 +237,9 @@ class _NotesListViewState extends State<NotesListView> {
           children: [
             _buildCupertinoFilterChip('All', _selectedFilter == null),
             const SizedBox(width: 8),
-            _buildCupertinoFilterChip('Sermons', _selectedFilter == NoteType.sermon),
-            const SizedBox(width: 8),
             _buildCupertinoFilterChip('Journal', _selectedFilter == NoteType.journal),
+            const SizedBox(width: 8),
+            _buildCupertinoFilterChip('Sermons', _selectedFilter == NoteType.sermon),
           ],
         ),
       );
@@ -256,14 +256,14 @@ class _NotesListViewState extends State<NotesListView> {
             onSelected: (_) => _onFilterChanged(null),
           ),
           FilterChip(
-            label: const Text('Sermons'),
-            selected: _selectedFilter == NoteType.sermon,
-            onSelected: (_) => _onFilterChanged(NoteType.sermon),
-          ),
-          FilterChip(
             label: const Text('Journal'),
             selected: _selectedFilter == NoteType.journal,
             onSelected: (_) => _onFilterChanged(NoteType.journal),
+          ),
+          FilterChip(
+            label: const Text('Sermons'),
+            selected: _selectedFilter == NoteType.sermon,
+            onSelected: (_) => _onFilterChanged(NoteType.sermon),
           ),
         ],
       ),
@@ -275,10 +275,10 @@ class _NotesListViewState extends State<NotesListView> {
       onTap: () {
         if (label == 'All') {
           _onFilterChanged(null);
-        } else if (label == 'Sermons') {
-          _onFilterChanged(NoteType.sermon);
         } else if (label == 'Journal') {
           _onFilterChanged(NoteType.journal);
+        } else if (label == 'Sermons') {
+          _onFilterChanged(NoteType.sermon);
         }
       },
       child: Container(
