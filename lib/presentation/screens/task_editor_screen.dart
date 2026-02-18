@@ -122,21 +122,23 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         _existingTask!.recurrenceRule = rule;
         await taskService.updateTask(_existingTask!);
 
-        // Update notifications
-        await NotificationService.cancelForTask(_existingTask!.id);
-        if (_hasReminder) {
-          if (rule != null && rule.type != RecurrenceType.none) {
-            await NotificationService.scheduleRecurring(
-              taskId: _existingTask!.id, title: _existingTask!.title,
-              rule: rule, baseTime: dueDateTime,
-            );
-          } else {
-            await NotificationService.scheduleOneTime(
-              taskId: _existingTask!.id, title: _existingTask!.title,
-              scheduledDate: dueDateTime,
-            );
+        // Update notifications (non-blocking)
+        try {
+          await NotificationService.cancelForTask(_existingTask!.id);
+          if (_hasReminder) {
+            if (rule != null && rule.type != RecurrenceType.none) {
+              await NotificationService.scheduleRecurring(
+                taskId: _existingTask!.id, title: _existingTask!.title,
+                rule: rule, baseTime: dueDateTime,
+              );
+            } else {
+              await NotificationService.scheduleOneTime(
+                taskId: _existingTask!.id, title: _existingTask!.title,
+                scheduledDate: dueDateTime,
+              );
+            }
           }
-        }
+        } catch (_) {}
       } else {
         final task = Task()
           ..title = _titleController.text.trim()
@@ -154,17 +156,20 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
 
         final id = await taskService.createTask(task);
 
-        if (_hasReminder) {
-          if (rule != null && rule.type != RecurrenceType.none) {
-            await NotificationService.scheduleRecurring(
-              taskId: id, title: task.title, rule: rule, baseTime: dueDateTime,
-            );
-          } else {
-            await NotificationService.scheduleOneTime(
-              taskId: id, title: task.title, scheduledDate: dueDateTime,
-            );
+        // Schedule notifications (non-blocking)
+        try {
+          if (_hasReminder) {
+            if (rule != null && rule.type != RecurrenceType.none) {
+              await NotificationService.scheduleRecurring(
+                taskId: id, title: task.title, rule: rule, baseTime: dueDateTime,
+              );
+            } else {
+              await NotificationService.scheduleOneTime(
+                taskId: id, title: task.title, scheduledDate: dueDateTime,
+              );
+            }
           }
-        }
+        } catch (_) {}
       }
 
       if (mounted) Navigator.of(context).pop(true);
@@ -256,6 +261,10 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(widget.taskId == null ? 'New Task' : 'Edit Task'),
         actions: [
           IconButton(

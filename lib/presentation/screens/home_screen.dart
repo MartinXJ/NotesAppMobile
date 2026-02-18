@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../../core/utils/platform_utils.dart';
 import '../../domain/services/theme_service.dart';
 import '../../domain/services/search_service.dart';
@@ -288,8 +289,23 @@ class _NotesListViewState extends State<NotesListView> {
   }
 
   String _getPreview(String content) {
-    // Extract plain text preview from content (first 100 chars)
+    // Try to extract plain text from Quill JSON content
     if (content.isEmpty) return 'No content';
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is List) {
+        final buffer = StringBuffer();
+        for (final op in decoded) {
+          if (op is Map && op.containsKey('insert') && op['insert'] is String) {
+            buffer.write(op['insert']);
+          }
+        }
+        final plain = buffer.toString().trim();
+        if (plain.isEmpty) return 'No content';
+        return plain.length > 100 ? '${plain.substring(0, 100)}...' : plain;
+      }
+    } catch (_) {}
+    // Fallback: raw content
     return content.length > 100 ? '${content.substring(0, 100)}...' : content;
   }
 
@@ -426,7 +442,7 @@ class _NotesListViewState extends State<NotesListView> {
                                 return NoteCard(
                                   id: note.id,
                                   title: note.title,
-                                  preview: _getPreview(note.content),
+                                  preview: _getPreview(note.plainTextContent),
                                   modifiedAt: note.modifiedAt,
                                   sermonDate: note.sermonDate,
                                   colorHex: note.colorHex,
@@ -442,7 +458,7 @@ class _NotesListViewState extends State<NotesListView> {
                                 return NoteCard(
                                   id: note.id,
                                   title: note.title,
-                                  preview: _getPreview(note.content),
+                                  preview: _getPreview(note.plainTextContent),
                                   modifiedAt: note.modifiedAt,
                                   colorHex: note.colorHex,
                                   tags: note.tags,
@@ -529,7 +545,7 @@ class _NotesListViewState extends State<NotesListView> {
                             return NoteCard(
                               id: note.id,
                               title: note.title,
-                              preview: _getPreview(note.content),
+                              preview: _getPreview(note.plainTextContent),
                               modifiedAt: note.modifiedAt,
                               sermonDate: note.sermonDate,
                               colorHex: note.colorHex,
@@ -545,7 +561,7 @@ class _NotesListViewState extends State<NotesListView> {
                             return NoteCard(
                               id: note.id,
                               title: note.title,
-                              preview: _getPreview(note.content),
+                              preview: _getPreview(note.plainTextContent),
                               modifiedAt: note.modifiedAt,
                               colorHex: note.colorHex,
                               tags: note.tags,

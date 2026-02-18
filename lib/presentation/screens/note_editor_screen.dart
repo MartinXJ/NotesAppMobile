@@ -80,10 +80,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     // Cancel existing timer
     _autoSaveTimer?.cancel();
     
-    // Start new timer for auto-save (2 seconds after last change)
-    _autoSaveTimer = Timer(const Duration(seconds: 2), () {
-      _saveNote(showMessage: false);
-    });
+    // Only auto-save existing notes (not new ones — those save on explicit action)
+    if (widget.noteId != null) {
+      _autoSaveTimer = Timer(const Duration(seconds: 2), () {
+        _saveNote(showMessage: false);
+      });
+    }
   }
 
   Future<void> _loadNote() async {
@@ -173,10 +175,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           
           if (showMessage && mounted) {
             _showSaveMessage('Note saved');
-          }
-          
-          // Navigate back with the new note ID
-          if (mounted) {
             Navigator.of(context).pop(true);
           }
         } else {
@@ -216,10 +214,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           
           if (showMessage && mounted) {
             _showSaveMessage('Note saved');
-          }
-          
-          // Navigate back with the new note ID
-          if (mounted) {
             Navigator.of(context).pop(true);
           }
         } else {
@@ -249,6 +243,17 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  Future<void> _handleBack() async {
+    _autoSaveTimer?.cancel();
+    // Auto-save existing notes on back; for new notes, save if there's content
+    final hasContent = _titleController.text.trim().isNotEmpty ||
+        _quillController.document.toPlainText().trim().isNotEmpty;
+    if (widget.noteId != null || hasContent) {
+      await _saveNote(showMessage: false);
+    }
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   void _showSaveMessage(String message) {
@@ -455,6 +460,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (PlatformUtils.isIOS) {
       return CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            child: const Icon(CupertinoIcons.back),
+            onPressed: () => _handleBack(),
+          ),
           middle: Text(widget.noteId == null ? 'New Note' : 'Edit Note'),
           trailing: CupertinoButton(
             padding: EdgeInsets.zero,
@@ -472,17 +482,28 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.noteId == null ? 'New Note' : 'Edit Note'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () => _saveNote(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _handleBack(),
           ),
-        ],
+          title: Text(widget.noteId == null ? 'New Note' : 'Edit Note'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: () => _saveNote(),
+            ),
+          ],
+        ),
+        body: _buildEditorContent(),
       ),
-      body: _buildEditorContent(),
     );
   }
 

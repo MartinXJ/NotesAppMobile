@@ -68,7 +68,7 @@ class NotesApp extends StatelessWidget {
     // Use Cupertino app for iOS, Material app for Android
     if (PlatformUtils.isIOS) {
       return CupertinoApp(
-        title: 'Notes App',
+        title: 'SoloNotes',
         theme: AppCupertinoTheme.lightTheme,
         home: const HomeScreen(),
         debugShowCheckedModeBanner: false,
@@ -78,7 +78,7 @@ class NotesApp extends StatelessWidget {
 
     // Material Design for Android
     return MaterialApp(
-      title: 'Notes App',
+      title: 'SoloNotes',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeService.flutterThemeMode,

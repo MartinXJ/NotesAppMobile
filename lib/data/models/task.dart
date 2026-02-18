@@ -50,6 +50,9 @@ class Task {
   /// Whether this task has a reminder enabled
   late bool hasReminder;
 
+  /// Keep this task forever (never auto-delete when completed)
+  bool keepForever = false;
+
   /// Recurrence rule (embedded, nullable)
   RecurrenceRule? recurrenceRule;
 }

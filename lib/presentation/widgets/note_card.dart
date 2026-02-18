@@ -5,7 +5,7 @@ import '../../data/models/enums.dart';
 import 'package:intl/intl.dart';
 
 /// Note card widget for displaying note in list
-class NoteCard extends StatelessWidget {
+class NoteCard extends StatefulWidget {
   final int id;
   final String title;
   final String preview;
@@ -30,15 +30,22 @@ class NoteCard extends StatelessWidget {
   });
 
   @override
+  State<NoteCard> createState() => _NoteCardState();
+}
+
+class _NoteCardState extends State<NoteCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final color = _parseColor(colorHex);
-    final dateStr = DateFormat('MMM d, yyyy').format(modifiedAt);
-    final sermonDateStr = sermonDate != null ? DateFormat('MMM d, yyyy').format(sermonDate!) : null;
+    final color = _parseColor(widget.colorHex);
+    final dateStr = DateFormat('MMM d, yyyy').format(widget.modifiedAt);
+    final sermonDateStr = widget.sermonDate != null ? DateFormat('MMM d, yyyy').format(widget.sermonDate!) : null;
 
     if (PlatformUtils.isIOS) {
       return CupertinoButton(
         padding: EdgeInsets.zero,
-        onPressed: onTap,
+        onPressed: widget.onTap,
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.all(16),
@@ -53,7 +60,7 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    noteType == NoteType.sermon
+                    widget.noteType == NoteType.sermon
                         ? CupertinoIcons.book
                         : CupertinoIcons.doc_text,
                     size: 16,
@@ -62,7 +69,7 @@ class NoteCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      title.isEmpty ? 'Untitled' : title,
+                      widget.title.isEmpty ? 'Untitled' : widget.title,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -74,17 +81,20 @@ class NoteCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                preview,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: CupertinoColors.secondaryLabel,
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  widget.preview,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                  maxLines: _expanded ? 10 : 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   Text(
@@ -101,12 +111,12 @@ class NoteCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 10, color: CupertinoColors.tertiaryLabel),
                     ),
                   ],
-                  if (tags.isNotEmpty) ...[
+                  if (widget.tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       child: Wrap(
                         spacing: 4,
-                        children: tags.take(3).map((tag) => _buildTag(tag, true)).toList(),
+                        children: widget.tags.take(3).map((tag) => _buildTag(tag, true)).toList(),
                       ),
                     ),
                   ],
@@ -126,7 +136,7 @@ class NoteCard extends StatelessWidget {
         side: BorderSide(color: color, width: 2),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -136,14 +146,14 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    noteType == NoteType.sermon ? Icons.book : Icons.note,
+                    widget.noteType == NoteType.sermon ? Icons.book : Icons.note,
                     size: 16,
                     color: Theme.of(context).colorScheme.secondary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      title.isEmpty ? 'Untitled' : title,
+                      widget.title.isEmpty ? 'Untitled' : widget.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -153,14 +163,17 @@ class NoteCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                preview,
-                style: Theme.of(context).textTheme.bodyMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  widget.preview,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  maxLines: _expanded ? 10 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   Text(
@@ -174,12 +187,12 @@ class NoteCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
                     ),
                   ],
-                  if (tags.isNotEmpty) ...[
+                  if (widget.tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       child: Wrap(
                         spacing: 4,
-                        children: tags.take(3).map((tag) => _buildTag(tag, false)).toList(),
+                        children: widget.tags.take(3).map((tag) => _buildTag(tag, false)).toList(),
                       ),
                     ),
                   ],

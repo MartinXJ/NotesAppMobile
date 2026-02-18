@@ -51,7 +51,38 @@ class TaskService extends ChangeNotifier {
 
   Future<void> loadTasks() async {
     _tasks = await _repository.getAllActiveTasks();
+    // Auto-archive: permanently delete completed tasks older than 30 days (unless keepForever)
+    await _archiveOldCompletedTasks();
     notifyListeners();
+  }
+
+  /// Permanently delete completed tasks older than 30 days (unless keepForever)
+  Future<void> _archiveOldCompletedTasks() async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final toDelete = <int>[];
+    for (final task in _tasks) {
+      if (task.isCompleted &&
+          !task.keepForever &&
+          task.completedAt != null &&
+          task.completedAt!.isBefore(cutoff)) {
+        toDelete.add(task.id);
+      }
+    }
+    for (final id in toDelete) {
+      await _repository.permanentlyDeleteTask(id);
+    }
+    if (toDelete.isNotEmpty) {
+      _tasks = await _repository.getAllActiveTasks();
+    }
+  }
+
+  /// Archive all completed tasks (soft delete, kept for 30 days)
+  Future<void> archiveCompleted() async {
+    final completed = _tasks.where((t) => t.isCompleted && !t.keepForever).toList();
+    for (final task in completed) {
+      await _repository.softDeleteTask(task.id);
+    }
+    await loadTasks();
   }
 
   Future<int> createTask(Task task) async {

@@ -52,12 +52,72 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
+  void _showTaskOptions(Task task, TaskService taskService) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(task.keepForever ? Icons.push_pin_outlined : Icons.push_pin),
+              title: Text(task.keepForever ? 'Remove keep forever' : 'Keep forever'),
+              subtitle: const Text('Prevents auto-archive after 30 days'),
+              onTap: () async {
+                task.keepForever = !task.keepForever;
+                await taskService.updateTask(task);
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                await taskService.deleteTask(task.id);
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'archive') {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Archive completed tasks?'),
+                    content: const Text('Completed tasks will be archived and permanently deleted after 30 days (unless pinned).'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Archive')),
+                    ],
+                  ),
+                );
+                if (confirmed == true && mounted) {
+                  final taskService = Provider.of<TaskService>(context, listen: false);
+                  await taskService.archiveCompleted();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Completed tasks archived')),
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'archive', child: Text('Archive completed tasks')),
+            ],
+          ),
           IconButton(
             icon: Icon(_isCalendarView ? Icons.list : Icons.calendar_month),
             onPressed: () => setState(() => _isCalendarView = !_isCalendarView),
@@ -126,6 +186,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
             Icon(Icons.checklist, size: 64, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 16),
             Text('No tasks yet', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.outline)),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () => _navigateToEditor(),
+              icon: const Icon(Icons.add),
+              label: const Text('Create your first task'),
+            ),
           ],
         ),
       );
@@ -149,7 +215,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
         padding: const EdgeInsets.only(right: 16),
         child: const Icon(Icons.delete, color: Colors.white),
       ),
-      onDismissed: (_) => taskService.deleteTask(task.id),
+      confirmDismiss: (_) async {
+        await taskService.deleteTask(task.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${task.title}" deleted'),
+              action: SnackBarAction(
+                label: 'Undo',
+                onPressed: () => taskService.restoreTask(task.id),
+              ),
+            ),
+          );
+        }
+        return false; // We already handled deletion
+      },
       child: ListTile(
         leading: Checkbox(
           value: task.isCompleted,
@@ -166,9 +246,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
           children: [
             Icon(Icons.calendar_today, size: 12, color: isOverdue ? Colors.red : null),
             const SizedBox(width: 4),
-            Text(
-              DateFormat('MMM d, yyyy – h:mm a').format(task.dueDate),
-              style: TextStyle(fontSize: 12, color: isOverdue ? Colors.red : null),
+            Flexible(
+              child: Text(
+                DateFormat('MMM d, yyyy – h:mm a').format(task.dueDate),
+                style: TextStyle(fontSize: 12, color: isOverdue ? Colors.red : null),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(width: 8),
             Container(
@@ -183,9 +266,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
               const SizedBox(width: 4),
               Icon(Icons.notifications_active, size: 14, color: Theme.of(context).colorScheme.primary),
             ],
+            if (task.keepForever) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.push_pin, size: 14, color: Theme.of(context).colorScheme.tertiary),
+            ],
           ],
         ),
         onTap: () => _navigateToEditor(taskId: task.id),
+        onLongPress: () => _showTaskOptions(task, taskService),
       ),
     );
   }

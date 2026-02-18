@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -73,16 +74,21 @@ class NotificationService {
     required String title,
     required DateTime scheduledDate,
   }) async {
-    await _plugin.zonedSchedule(
-      taskId,
-      'Task Reminder',
-      title,
-      tz.TZDateTime.from(scheduledDate, tz.local),
-      _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: null,
-    );
+    try {
+      await _plugin.zonedSchedule(
+        taskId,
+        'Task Reminder',
+        title,
+        tz.TZDateTime.from(scheduledDate, tz.local),
+        _notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: null,
+      );
+    } catch (e) {
+      // Fallback: show immediate notification if scheduling fails
+      await _plugin.show(taskId, 'Task Reminder', title, _notificationDetails);
+    }
   }
 
   /// Schedule recurring notifications based on recurrence rule
@@ -92,66 +98,71 @@ class NotificationService {
     required RecurrenceRule rule,
     required DateTime baseTime,
   }) async {
-    switch (rule.type) {
-      case RecurrenceType.daily:
-        await _plugin.zonedSchedule(
-          taskId,
-          'Task Reminder',
-          title,
-          tz.TZDateTime.from(baseTime, tz.local),
-          _notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.time,
-        );
-        break;
-
-      case RecurrenceType.weekly:
-        if (rule.daysOfWeek.isEmpty) break;
-        for (var i = 0; i < rule.daysOfWeek.length; i++) {
-          final day = rule.daysOfWeek[i];
-          final nextDate = _nextWeekday(baseTime, day);
+    try {
+      switch (rule.type) {
+        case RecurrenceType.daily:
           await _plugin.zonedSchedule(
-            taskId * 10 + i,
+            taskId,
             'Task Reminder',
             title,
-            tz.TZDateTime.from(nextDate, tz.local),
+            tz.TZDateTime.from(baseTime, tz.local),
             _notificationDetails,
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+            matchDateTimeComponents: DateTimeComponents.time,
           );
-        }
-        break;
+          break;
 
-      case RecurrenceType.monthly:
-        await _plugin.zonedSchedule(
-          taskId,
-          'Task Reminder',
-          title,
-          tz.TZDateTime.from(baseTime, tz.local),
-          _notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
-        );
-        break;
+        case RecurrenceType.weekly:
+          if (rule.daysOfWeek.isEmpty) break;
+          for (var i = 0; i < rule.daysOfWeek.length; i++) {
+            final day = rule.daysOfWeek[i];
+            final nextDate = _nextWeekday(baseTime, day);
+            await _plugin.zonedSchedule(
+              taskId * 10 + i,
+              'Task Reminder',
+              title,
+              tz.TZDateTime.from(nextDate, tz.local),
+              _notificationDetails,
+              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+              uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+              matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+            );
+          }
+          break;
 
-      case RecurrenceType.yearly:
-        await _plugin.zonedSchedule(
-          taskId,
-          'Task Reminder',
-          title,
-          tz.TZDateTime.from(baseTime, tz.local),
-          _notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.dateAndTime,
-        );
-        break;
+        case RecurrenceType.monthly:
+          await _plugin.zonedSchedule(
+            taskId,
+            'Task Reminder',
+            title,
+            tz.TZDateTime.from(baseTime, tz.local),
+            _notificationDetails,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
+          );
+          break;
 
-      case RecurrenceType.none:
-        break;
+        case RecurrenceType.yearly:
+          await _plugin.zonedSchedule(
+            taskId,
+            'Task Reminder',
+            title,
+            tz.TZDateTime.from(baseTime, tz.local),
+            _notificationDetails,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.dateAndTime,
+          );
+          break;
+
+        case RecurrenceType.none:
+          break;
+      }
+    } catch (e) {
+      // Silently handle scheduling failures — task is still saved
+      debugPrint('Failed to schedule recurring notification: $e');
     }
   }
 
@@ -167,7 +178,11 @@ class NotificationService {
 
   /// Reschedule all active reminders (called on app restart)
   static Future<void> rescheduleAll(List<Task> tasks) async {
-    await _plugin.cancelAll();
+    try {
+      await _plugin.cancelAll();
+    } catch (e) {
+      debugPrint('Failed to cancel all notifications: $e');
+    }
 
     for (final task in tasks) {
       if (!task.hasReminder || task.isDeleted) continue;
