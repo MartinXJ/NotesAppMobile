@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:intl/intl.dart';
 import '../../core/utils/platform_utils.dart';
 import '../../domain/repositories/notes_repository.dart';
 import '../../data/models/sermon_note.dart';
@@ -35,6 +36,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   NoteType _noteType = NoteType.journal;
   String _selectedColor = '#FF9E9E9E'; // Default grey
   List<String> _tags = [];
+  DateTime _sermonDate = DateTime.now(); // For sermon notes
   bool _isLoading = true;
   bool _isSaving = false;
   Timer? _autoSaveTimer;
@@ -98,6 +100,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         _titleController.text = note.title;
         _selectedColor = note.colorHex;
         _tags = List.from(note.tags);
+        _sermonDate = note.sermonDate;
         
         // Load Quill document from JSON
         if (note.content.isNotEmpty) {
@@ -158,9 +161,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             ..plainTextContent = plainText
             ..colorHex = _selectedColor
             ..tags = _tags
-            ..sermonDate = DateTime.now()
+            ..sermonDate = _sermonDate
             ..createdAt = DateTime.now()
-            ..modifiedAt = DateTime.now();
+            ..modifiedAt = DateTime.now()
+            ..deviceId = ''
+            ..version = 1
+            ..isSynced = false
+            ..isDeleted = false;
           
           await repository.createSermonNote(note);
           
@@ -199,7 +206,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             ..colorHex = _selectedColor
             ..tags = _tags
             ..createdAt = DateTime.now()
-            ..modifiedAt = DateTime.now();
+            ..modifiedAt = DateTime.now()
+            ..deviceId = ''
+            ..version = 1
+            ..isSynced = false
+            ..isDeleted = false;
           
           await repository.createJournalNote(note);
           
@@ -342,6 +353,93 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     setState(() => _tags.remove(tag));
   }
 
+  Widget _buildSermonDatePicker() {
+    final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(_sermonDate);
+    
+    if (PlatformUtils.isIOS) {
+      return GestureDetector(
+        onTap: _showSermonDatePicker,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey6,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(CupertinoIcons.calendar, size: 20, color: CupertinoColors.activeBlue),
+              const SizedBox(width: 8),
+              const Text('Sermon Date', style: TextStyle(fontSize: 14, color: CupertinoColors.secondaryLabel)),
+              const Spacer(),
+              Text(dateStr, style: const TextStyle(fontSize: 14, color: CupertinoColors.activeBlue)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: _showSermonDatePicker,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today, size: 20, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            Text('Sermon Date', style: Theme.of(context).textTheme.bodyMedium),
+            const Spacer(),
+            Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSermonDatePicker() async {
+    if (PlatformUtils.isIOS) {
+      await showCupertinoModalPopup(
+        context: context,
+        builder: (context) => Container(
+          height: 260,
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
+                  CupertinoButton(child: const Text('Done'), onPressed: () => Navigator.pop(context)),
+                ],
+              ),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: _sermonDate,
+                  onDateTimeChanged: (date) => setState(() => _sermonDate = date),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: _sermonDate,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+      );
+      if (picked != null) {
+        setState(() => _sermonDate = picked);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -444,6 +542,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            
+            // Sermon date picker (only for sermon notes)
+            if (_noteType == NoteType.sermon) ...[
+              _buildSermonDatePicker(),
+              const SizedBox(height: 16),
+            ],
             
             // Tags
             Wrap(

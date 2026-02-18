@@ -160,41 +160,41 @@ The implementation prioritizes offline-first functionality, establishing local d
     - **Property 18: Tag Suggestion Accuracy**
     - **Validates: Requirements 8.2**
 
-- [ ] 9. Sermon Date Management
-  - [ ] 9.1 Add sermon date field to Sermon notes
+- [x] 9. Sermon Date Management
+  - [x] 9.1 Add sermon date field to Sermon notes
     - Create date picker UI for sermon date
     - Default to current date
     - Allow date modification
     - Display sermon date in note views
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-  - [ ] 9.2 Implement sermon date filtering
+  - [x] 9.2 Implement sermon date filtering
     - Add date range filter for sermon notes
     - Use sermon date instead of creation date for Sermon notes
     - _Requirements: 2.6, 11.6_
 
-  - [ ] 9.3 Write unit tests for sermon date handling
+  - [x] 9.3 Write unit tests for sermon date handling
     - Test date picker
     - Test date display
     - Test date filtering
     - _Requirements: 2.1, 2.6_
 
-- [ ] 10. Search UI Implementation
-  - [ ] 10.1 Create search bar component
+- [x] 10. Search UI Implementation
+  - [x] 10.1 Create search bar component
     - Add search TextField to app bar
     - Implement real-time search with debouncing
     - Display search results with highlighting
     - Show "no results" message when appropriate
     - _Requirements: 9.1, 9.3, 9.4, 9.5_
 
-  - [ ] 10.2 Write integration tests for search UI
+  - [x] 10.2 Write integration tests for search UI
     - Test search input
     - Test result display
     - Test highlighting
     - _Requirements: 9.3, 9.5_
 
-- [ ] 11. Filter UI Implementation
-  - [ ] 11.1 Create filter panel
+- [x] 11. Filter UI Implementation
+  - [x] 11.1 Create filter panel
     - Build filter drawer or bottom sheet
     - Add tag filter chips
     - Add color filter options
@@ -203,18 +203,18 @@ The implementation prioritizes offline-first functionality, establishing local d
     - Add clear filters button
     - _Requirements: 10.2, 10.3, 10.4, 10.6, 10.7_
 
-  - [ ] 11.2 Implement date range presets
+  - [x] 11.2 Implement date range presets
     - Add preset buttons (today, this week, this month, this year)
     - Add custom date range selection
     - _Requirements: 11.1, 11.3, 11.4_
 
-  - [ ] 11.3 Write integration tests for filter UI
+  - [x] 11.3 Write integration tests for filter UI
     - Test filter application
     - Test filter clearing
     - Test multiple filters
     - _Requirements: 10.5, 10.7_
 
-- [ ] 12. Checkpoint - Core UI Complete
+- [x] 12. Checkpoint - Core UI Complete
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 13. Media Attachment Support

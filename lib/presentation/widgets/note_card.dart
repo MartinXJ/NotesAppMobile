@@ -10,6 +10,7 @@ class NoteCard extends StatelessWidget {
   final String title;
   final String preview;
   final DateTime modifiedAt;
+  final DateTime? sermonDate;
   final String colorHex;
   final List<String> tags;
   final NoteType noteType;
@@ -21,6 +22,7 @@ class NoteCard extends StatelessWidget {
     required this.title,
     required this.preview,
     required this.modifiedAt,
+    this.sermonDate,
     required this.colorHex,
     required this.tags,
     required this.noteType,
@@ -31,6 +33,7 @@ class NoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _parseColor(colorHex);
     final dateStr = DateFormat('MMM d, yyyy').format(modifiedAt);
+    final sermonDateStr = sermonDate != null ? DateFormat('MMM d, yyyy').format(sermonDate!) : null;
 
     if (PlatformUtils.isIOS) {
       return CupertinoButton(
@@ -85,12 +88,19 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    dateStr,
+                    sermonDateStr != null ? 'Sermon: $sermonDateStr' : dateStr,
                     style: const TextStyle(
                       fontSize: 12,
                       color: CupertinoColors.tertiaryLabel,
                     ),
                   ),
+                  if (sermonDateStr != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      'Modified: $dateStr',
+                      style: const TextStyle(fontSize: 10, color: CupertinoColors.tertiaryLabel),
+                    ),
+                  ],
                   if (tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(
@@ -154,9 +164,16 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    dateStr,
+                    sermonDateStr != null ? 'Sermon: $sermonDateStr' : dateStr,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (sermonDateStr != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      'Modified: $dateStr',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                    ),
+                  ],
                   if (tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(

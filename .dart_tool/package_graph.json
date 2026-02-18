@@ -10,6 +10,7 @@
         "connectivity_plus",
         "cupertino_icons",
         "flutter",
+        "flutter_localizations",
         "flutter_quill",
         "flutter_secure_storage",
         "google_sign_in",
@@ -286,6 +287,15 @@
       "name": "cupertino_icons",
       "version": "1.0.8",
       "dependencies": []
+    },
+    {
+      "name": "flutter_localizations",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter",
+        "intl",
+        "path"
+      ]
     },
     {
       "name": "flutter",
@@ -1125,15 +1135,6 @@
         "collection",
         "diff_match_patch",
         "quiver"
-      ]
-    },
-    {
-      "name": "flutter_localizations",
-      "version": "0.0.0",
-      "dependencies": [
-        "flutter",
-        "intl",
-        "path"
       ]
     },
     {
