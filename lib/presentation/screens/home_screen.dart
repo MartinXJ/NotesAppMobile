@@ -14,6 +14,7 @@ import '../../data/models/enums.dart';
 import '../widgets/note_card.dart';
 import '../widgets/filter_panel.dart';
 import 'note_editor_screen.dart';
+import 'task_list_screen.dart';
 
 /// Home screen displaying the notes list
 class HomeScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = [
     const NotesListView(),
     const SearchView(),
+    const TaskListScreen(),
     const SettingsView(),
   ];
 
@@ -51,6 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.search),
               label: 'Search',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(CupertinoIcons.checkmark_square),
+              label: 'Tasks',
             ),
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.settings),
@@ -80,6 +86,10 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.search),
             label: 'Search',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.checklist),
+            label: 'Tasks',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings),

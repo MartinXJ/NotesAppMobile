@@ -7,10 +7,18 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/cupertino_theme.dart';
 import 'core/utils/platform_utils.dart';
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/task_editor_screen.dart';
 import 'data/database/isar_service.dart';
+import 'data/services/notification_service.dart';
 import 'domain/services/theme_service.dart';
+import 'domain/services/task_service.dart';
 import 'domain/repositories/notes_repository.dart';
+import 'domain/repositories/task_repository.dart';
 import 'data/repositories/notes_repository_impl.dart';
+import 'data/repositories/task_repository_impl.dart';
+
+/// Global navigator key for deep linking from notifications
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,11 +26,32 @@ void main() async {
   // Initialize Isar database
   await IsarService.getInstance();
   
+  // Initialize notifications
+  await NotificationService.initialize();
+  
+  final taskRepository = TaskRepositoryImpl();
+  final taskService = TaskService(taskRepository);
+  
+  // Load tasks and reschedule notifications on startup
+  await taskService.loadTasks();
+  await NotificationService.rescheduleAll(taskService.tasks);
+
+  // Wire notification tap to navigate to task editor
+  NotificationService.onNotificationTap = (taskId) {
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => TaskEditorScreen(taskId: taskId),
+      ),
+    );
+  };
+  
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeService()),
         Provider<NotesRepository>(create: (_) => NotesRepositoryImpl()),
+        Provider<TaskRepository>(create: (_) => taskRepository),
+        ChangeNotifierProvider.value(value: taskService),
       ],
       child: const NotesApp(),
     ),
@@ -43,6 +72,7 @@ class NotesApp extends StatelessWidget {
         theme: AppCupertinoTheme.lightTheme,
         home: const HomeScreen(),
         debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
       );
     }
 
@@ -54,6 +84,7 @@ class NotesApp extends StatelessWidget {
       themeMode: themeService.flutterThemeMode,
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
