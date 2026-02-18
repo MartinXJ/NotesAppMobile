@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/sermon_note.dart';
 import '../models/journal_note.dart';
 import '../models/app_settings.dart';
+import '../models/task.dart';
 
 /// Service for managing Isar database instance
 class IsarService {
@@ -33,6 +34,7 @@ class IsarService {
         SermonNoteSchema,
         JournalNoteSchema,
         AppSettingsSchema,
+        TaskSchema,
       ],
       directory: directory,
       name: 'notes_app_db',
