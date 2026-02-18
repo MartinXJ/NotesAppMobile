@@ -162,7 +162,7 @@ class NotificationService {
       }
     } catch (e) {
       // Silently handle scheduling failures — task is still saved
-      debugPrint('Failed to schedule recurring notification: $e');
+      debugPrint('[DEBUG] Failed to schedule recurring notification: $e');
     }
   }
 
@@ -181,7 +181,7 @@ class NotificationService {
     try {
       await _plugin.cancelAll();
     } catch (e) {
-      debugPrint('Failed to cancel all notifications: $e');
+      debugPrint('[DEBUG] Failed to cancel all notifications: $e');
     }
 
     for (final task in tasks) {
@@ -194,14 +194,14 @@ class NotificationService {
           taskId: task.id,
           title: task.title,
           rule: rule,
-          baseTime: task.reminderTime,
+          baseTime: task.reminderTime!,
         );
       } else {
-        if (task.reminderTime.isAfter(DateTime.now())) {
+        if (task.reminderTime != null && task.reminderTime!.isAfter(DateTime.now())) {
           await scheduleOneTime(
             taskId: task.id,
             title: task.title,
-            scheduledDate: task.reminderTime,
+            scheduledDate: task.reminderTime!,
           );
         }
       }

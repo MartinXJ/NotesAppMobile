@@ -6,22 +6,19 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../../core/utils/platform_utils.dart';
-import '../../domain/repositories/notes_repository.dart';
-import '../../data/models/sermon_note.dart';
-import '../../data/models/journal_note.dart';
-import '../../data/models/enums.dart';
+import '../../domain/repositories/note_repository.dart';
+import '../../data/models/note.dart';
+import '../../data/models/note_template.dart';
 
-/// Note editor screen for creating and editing notes
+/// Note editor screen with preview/edit mode and overflow menu
 class NoteEditorScreen extends StatefulWidget {
   final int? noteId;
-  final NoteType? initialNoteType;
-  final bool isSermon;
+  final NoteTemplate? template;
 
   const NoteEditorScreen({
     super.key,
     this.noteId,
-    this.initialNoteType,
-    this.isSermon = false,
+    this.template,
   });
 
   @override
@@ -29,19 +26,22 @@ class NoteEditorScreen extends StatefulWidget {
 }
 
 class _NoteEditorScreenState extends State<NoteEditorScreen> {
-  final _titleController = TextEditingController();
-  final _tagController = TextEditingController();
   late QuillController _quillController;
-  
-  NoteType _noteType = NoteType.journal;
-  String _selectedColor = '#FF9E9E9E'; // Default grey
-  List<String> _tags = [];
-  DateTime _sermonDate = DateTime.now(); // For sermon notes
+  bool _isPreviewMode = false;
   bool _isLoading = true;
   bool _isSaving = false;
   Timer? _autoSaveTimer;
-  
-  // Available colors for notes
+
+  // Note metadata (managed via overflow menu)
+  String? _title;
+  DateTime? _date;
+  String _colorHex = '#FF9E9E9E';
+  List<String> _tags = [];
+  int? _savedNoteId;
+
+  // Template info for new notes
+  bool _templateHasDate = false;
+
   final List<Map<String, dynamic>> _availableColors = [
     {'name': 'Grey', 'hex': '#FF9E9E9E', 'color': Colors.grey},
     {'name': 'Red', 'hex': '#FFEF5350', 'color': Colors.red},
@@ -58,30 +58,37 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   @override
   void initState() {
     super.initState();
-    _noteType = widget.initialNoteType ?? (widget.isSermon ? NoteType.sermon : NoteType.journal);
     _quillController = QuillController.basic();
+    // Existing notes open in preview mode, new notes in edit mode
+    _isPreviewMode = widget.noteId != null;
+    _savedNoteId = widget.noteId;
+
+    // Apply template defaults for new notes
+    if (widget.template != null && widget.noteId == null) {
+      _tags = List.from(widget.template!.defaultTags);
+      _templateHasDate = widget.template!.hasDate;
+      if (widget.template!.defaultColorHex != null) {
+        _colorHex = widget.template!.defaultColorHex!;
+      }
+      if (_templateHasDate) {
+        _date = DateTime.now();
+      }
+    }
+
     _loadNote();
-    
-    // Set up auto-save
     _quillController.addListener(_onContentChanged);
-    _titleController.addListener(_onContentChanged);
   }
 
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    _titleController.dispose();
-    _tagController.dispose();
     _quillController.dispose();
     super.dispose();
   }
 
   void _onContentChanged() {
-    // Cancel existing timer
     _autoSaveTimer?.cancel();
-    
-    // Only auto-save existing notes (not new ones — those save on explicit action)
-    if (widget.noteId != null) {
+    if (_savedNoteId != null) {
       _autoSaveTimer = Timer(const Duration(seconds: 2), () {
         _saveNote(showMessage: false);
       });
@@ -94,143 +101,77 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       return;
     }
 
-    final repository = Provider.of<NotesRepository>(context, listen: false);
-    
-    if (_noteType == NoteType.sermon) {
-      final note = await repository.getSermonNoteById(widget.noteId!);
-      if (note != null) {
-        _titleController.text = note.title;
-        _selectedColor = note.colorHex;
-        _tags = List.from(note.tags);
-        _sermonDate = note.sermonDate;
-        
-        // Load Quill document from JSON
-        if (note.content.isNotEmpty) {
-          try {
-            final doc = Document.fromJson(jsonDecode(note.content));
-            _quillController = QuillController(
-              document: doc,
-              selection: const TextSelection.collapsed(offset: 0),
-            );
-          } catch (e) {
-            // If JSON parsing fails, treat as plain text
-            _quillController.document.insert(0, note.content);
-          }
-        }
-      }
-    } else {
-      final note = await repository.getJournalNoteById(widget.noteId!);
-      if (note != null) {
-        _titleController.text = note.title;
-        _selectedColor = note.colorHex;
-        _tags = List.from(note.tags);
-        
-        // Load Quill document from JSON
-        if (note.content.isNotEmpty) {
-          try {
-            final doc = Document.fromJson(jsonDecode(note.content));
-            _quillController = QuillController(
-              document: doc,
-              selection: const TextSelection.collapsed(offset: 0),
-            );
-          } catch (e) {
-            // If JSON parsing fails, treat as plain text
-            _quillController.document.insert(0, note.content);
-          }
+    final repository = Provider.of<NoteRepository>(context, listen: false);
+    final note = await repository.getNoteById(widget.noteId!);
+    if (note != null) {
+      _title = note.title;
+      _colorHex = note.colorHex;
+      _tags = List.from(note.tags);
+      _date = note.date;
+
+      if (note.content.isNotEmpty) {
+        try {
+          final doc = Document.fromJson(jsonDecode(note.content));
+          _quillController = QuillController(
+            document: doc,
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+          _quillController.addListener(_onContentChanged);
+        } catch (e) {
+          _quillController.document.insert(0, note.content);
         }
       }
     }
-    
+
     setState(() => _isLoading = false);
   }
 
   Future<void> _saveNote({bool showMessage = true}) async {
     if (_isSaving) return;
-    
     setState(() => _isSaving = true);
-    
-    final repository = Provider.of<NotesRepository>(context, listen: false);
+
+    final repository = Provider.of<NoteRepository>(context, listen: false);
     final content = jsonEncode(_quillController.document.toDelta().toJson());
     final plainText = _quillController.document.toPlainText();
-    
+
     try {
-      if (_noteType == NoteType.sermon) {
-        if (widget.noteId == null) {
-          // Create new sermon note
-          final note = SermonNote()
-            ..title = _titleController.text.trim()
-            ..content = content
-            ..plainTextContent = plainText
-            ..colorHex = _selectedColor
-            ..tags = _tags
-            ..sermonDate = _sermonDate
-            ..createdAt = DateTime.now()
-            ..modifiedAt = DateTime.now()
-            ..deviceId = ''
-            ..version = 1
-            ..isSynced = false
-            ..isDeleted = false;
-          
-          await repository.createSermonNote(note);
-          
-          if (showMessage && mounted) {
-            _showSaveMessage('Note saved');
-            Navigator.of(context).pop(true);
-          }
-        } else {
-          // Update existing sermon note
-          final note = await repository.getSermonNoteById(widget.noteId!);
-          if (note != null) {
-            note.title = _titleController.text.trim();
-            note.content = content;
-            note.plainTextContent = plainText;
-            note.colorHex = _selectedColor;
-            note.tags = _tags;
-            
-            await repository.updateSermonNote(note);
-            
-            if (showMessage && mounted) {
-              _showSaveMessage('Note saved');
-            }
-          }
+      if (_savedNoteId == null) {
+        // Create new note
+        final note = Note()
+          ..title = _title
+          ..content = content
+          ..plainTextContent = plainText
+          ..colorHex = _colorHex
+          ..tags = _tags
+          ..date = _date
+          ..createdAt = DateTime.now()
+          ..modifiedAt = DateTime.now()
+          ..deviceId = ''
+          ..version = 1
+          ..isSynced = false
+          ..isDeleted = false;
+
+        final id = await repository.createNote(note);
+        _savedNoteId = id;
+
+        if (showMessage && mounted) {
+          _showSaveMessage('Note saved');
+          Navigator.of(context).pop(true);
         }
       } else {
-        if (widget.noteId == null) {
-          // Create new journal note
-          final note = JournalNote()
-            ..title = _titleController.text.trim()
-            ..content = content
-            ..plainTextContent = plainText
-            ..colorHex = _selectedColor
-            ..tags = _tags
-            ..createdAt = DateTime.now()
-            ..modifiedAt = DateTime.now()
-            ..deviceId = ''
-            ..version = 1
-            ..isSynced = false
-            ..isDeleted = false;
-          
-          await repository.createJournalNote(note);
-          
+        // Update existing note
+        final note = await repository.getNoteById(_savedNoteId!);
+        if (note != null) {
+          note.title = _title;
+          note.content = content;
+          note.plainTextContent = plainText;
+          note.colorHex = _colorHex;
+          note.tags = _tags;
+          note.date = _date;
+          await repository.updateNote(note);
+
           if (showMessage && mounted) {
             _showSaveMessage('Note saved');
-            Navigator.of(context).pop(true);
-          }
-        } else {
-          // Update existing journal note
-          final note = await repository.getJournalNoteById(widget.noteId!);
-          if (note != null) {
-            note.title = _titleController.text.trim();
-            note.content = content;
-            note.plainTextContent = plainText;
-            note.colorHex = _selectedColor;
-            note.tags = _tags;
-            
-            await repository.updateJournalNote(note);
-            
-            if (showMessage && mounted) {
-              _showSaveMessage('Note saved');
-            }
           }
         }
       }
@@ -239,18 +180,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         _showSaveMessage('Error saving note: $e');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Future<void> _handleBack() async {
     _autoSaveTimer?.cancel();
-    // Auto-save existing notes on back; for new notes, save if there's content
-    final hasContent = _titleController.text.trim().isNotEmpty ||
+    final hasContent = (_title != null && _title!.trim().isNotEmpty) ||
         _quillController.document.toPlainText().trim().isNotEmpty;
-    if (widget.noteId != null || hasContent) {
+    if (_savedNoteId != null || hasContent) {
       await _saveNote(showMessage: false);
     }
     if (mounted) Navigator.of(context).pop(true);
@@ -277,34 +215,36 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     }
   }
 
-  void _showColorPicker() {
+  // --- Overflow menu actions ---
+
+  void _showOverflowMenu() {
     if (PlatformUtils.isIOS) {
       showCupertinoModalPopup(
         context: context,
         builder: (context) => CupertinoActionSheet(
-          title: const Text('Choose Color'),
-          actions: _availableColors.map((colorData) {
-            return CupertinoActionSheetAction(
-              onPressed: () {
-                setState(() => _selectedColor = colorData['hex']);
-                Navigator.pop(context);
-              },
-              child: Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: colorData['color'],
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(colorData['name']),
-                ],
-              ),
-            );
-          }).toList(),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _editTitle(); },
+              child: const Text('Edit Title'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _pickDate(); },
+              child: Text(_date != null ? 'Change Date' : 'Set Date'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _manageTags(); },
+              child: const Text('Manage Tags'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _pickColor(); },
+              child: const Text('Pick Color'),
+            ),
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () { Navigator.pop(context); _deleteNote(); },
+              child: const Text('Delete Note'),
+            ),
+          ],
           cancelButton: CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
@@ -312,120 +252,117 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         ),
       );
     } else {
-      showDialog(
+      showModalBottomSheet(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Choose Color'),
-          content: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _availableColors.map((colorData) {
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _selectedColor = colorData['hex']);
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: colorData['color'],
-                    shape: BoxShape.circle,
-                    border: _selectedColor == colorData['hex']
-                        ? Border.all(color: Colors.black, width: 3)
-                        : null,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      );
-    }
-  }
-
-  void _addTag() {
-    final tag = _tagController.text.trim();
-    if (tag.isNotEmpty && !_tags.contains(tag)) {
-      setState(() {
-        _tags.add(tag);
-        _tagController.clear();
-      });
-    }
-  }
-
-  void _removeTag(String tag) {
-    setState(() => _tags.remove(tag));
-  }
-
-  Widget _buildSermonDatePicker() {
-    final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(_sermonDate);
-    
-    if (PlatformUtils.isIOS) {
-      return GestureDetector(
-        onTap: _showSermonDatePicker,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(CupertinoIcons.calendar, size: 20, color: CupertinoColors.activeBlue),
-              const SizedBox(width: 8),
-              const Text('Sermon Date', style: TextStyle(fontSize: 14, color: CupertinoColors.secondaryLabel)),
-              const Spacer(),
-              Text(dateStr, style: const TextStyle(fontSize: 14, color: CupertinoColors.activeBlue)),
+              ListTile(
+                leading: const Icon(Icons.title),
+                title: const Text('Edit Title'),
+                subtitle: Text(_title ?? 'No title'),
+                onTap: () { Navigator.pop(context); _editTitle(); },
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: Text(_date != null ? 'Change Date' : 'Set Date'),
+                subtitle: _date != null
+                    ? Text(DateFormat('MMM d, yyyy').format(_date!))
+                    : null,
+                onTap: () { Navigator.pop(context); _pickDate(); },
+              ),
+              ListTile(
+                leading: const Icon(Icons.label),
+                title: const Text('Manage Tags'),
+                subtitle: Text(_tags.isEmpty ? 'No tags' : _tags.join(', ')),
+                onTap: () { Navigator.pop(context); _manageTags(); },
+              ),
+              ListTile(
+                leading: Icon(Icons.circle,
+                    color: Color(int.parse(
+                        _colorHex.replaceFirst('#', '0x')))),
+                title: const Text('Pick Color'),
+                onTap: () { Navigator.pop(context); _pickColor(); },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Note',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () { Navigator.pop(context); _deleteNote(); },
+              ),
             ],
           ),
         ),
       );
     }
+  }
 
-    return InkWell(
-      onTap: _showSermonDatePicker,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(8),
+  void _editTitle() {
+    final controller = TextEditingController(text: _title ?? '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Title'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Note title'),
+          autofocus: true,
         ),
-        child: Row(
-          children: [
-            Icon(Icons.calendar_today, size: 20, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-            Text('Sermon Date', style: Theme.of(context).textTheme.bodyMedium),
-            const Spacer(),
-            Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-          ],
-        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() => _title = controller.text.trim().isEmpty
+                  ? null : controller.text.trim());
+              Navigator.pop(context);
+              if (_savedNoteId != null) _saveNote(showMessage: false);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _showSermonDatePicker() async {
+  Future<void> _pickDate() async {
     if (PlatformUtils.isIOS) {
       await showCupertinoModalPopup(
         context: context,
         builder: (context) => Container(
-          height: 260,
+          height: 300,
           color: CupertinoColors.systemBackground.resolveFrom(context),
           child: Column(
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
-                  CupertinoButton(child: const Text('Done'), onPressed: () => Navigator.pop(context)),
+                  CupertinoButton(
+                    child: const Text('Clear'),
+                    onPressed: () {
+                      setState(() => _date = null);
+                      Navigator.pop(context);
+                      if (_savedNoteId != null) _saveNote(showMessage: false);
+                    },
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
               ),
               Expanded(
                 child: CupertinoDatePicker(
                   mode: CupertinoDatePickerMode.date,
-                  initialDateTime: _sermonDate,
-                  onDateTimeChanged: (date) => setState(() => _sermonDate = date),
+                  initialDateTime: _date ?? DateTime.now(),
+                  onDateTimeChanged: (date) {
+                    setState(() => _date = date);
+                    if (_savedNoteId != null) _saveNote(showMessage: false);
+                  },
                 ),
               ),
             ],
@@ -435,26 +372,156 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     } else {
       final picked = await showDatePicker(
         context: context,
-        initialDate: _sermonDate,
+        initialDate: _date ?? DateTime.now(),
         firstDate: DateTime(2000),
         lastDate: DateTime(2100),
       );
       if (picked != null) {
-        setState(() => _sermonDate = picked);
+        setState(() => _date = picked);
+        if (_savedNoteId != null) _saveNote(showMessage: false);
       }
     }
   }
+
+  void _manageTags() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Manage Tags'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _tags.map((tag) => Chip(
+                  label: Text(tag),
+                  onDeleted: () {
+                    setDialogState(() => _tags.remove(tag));
+                    setState(() {});
+                  },
+                )).toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(hintText: 'Add tag'),
+                      onSubmitted: (value) {
+                        final tag = value.trim();
+                        if (tag.isNotEmpty && !_tags.contains(tag)) {
+                          setDialogState(() => _tags.add(tag));
+                          setState(() {});
+                          controller.clear();
+                        }
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      final tag = controller.text.trim();
+                      if (tag.isNotEmpty && !_tags.contains(tag)) {
+                        setDialogState(() => _tags.add(tag));
+                        setState(() {});
+                        controller.clear();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                if (_savedNoteId != null) _saveNote(showMessage: false);
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _pickColor() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Color'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _availableColors.map((colorData) {
+            return GestureDetector(
+              onTap: () {
+                setState(() => _colorHex = colorData['hex']);
+                Navigator.pop(context);
+                if (_savedNoteId != null) _saveNote(showMessage: false);
+              },
+              child: Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: colorData['color'],
+                  shape: BoxShape.circle,
+                  border: _colorHex == colorData['hex']
+                      ? Border.all(color: Colors.black, width: 3) : null,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteNote() async {
+    if (_savedNoteId == null) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Note'),
+        content: const Text('Move this note to trash?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final repository = Provider.of<NoteRepository>(context, listen: false);
+      await repository.deleteNote(_savedNoteId!);
+      if (mounted) Navigator.of(context).pop(true);
+    }
+  }
+
+  // --- Build ---
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return PlatformUtils.isIOS
           ? const CupertinoPageScaffold(
-              child: Center(child: CupertinoActivityIndicator()),
-            )
+              child: Center(child: CupertinoActivityIndicator()))
           : const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+              body: Center(child: CircularProgressIndicator()));
     }
 
     if (PlatformUtils.isIOS) {
@@ -465,20 +532,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             child: const Icon(CupertinoIcons.back),
             onPressed: () => _handleBack(),
           ),
-          middle: Text(widget.noteId == null ? 'New Note' : 'Edit Note'),
-          trailing: CupertinoButton(
-            padding: EdgeInsets.zero,
-            child: const Text('Save'),
-            onPressed: () => _saveNote(),
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
+          middle: Text(_isPreviewMode ? 'Preview' : 'Edit'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _buildEditorContent(),
+              if (!_isPreviewMode)
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  child: const Text('Save'),
+                  onPressed: () => _saveNote(),
+                ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: _showOverflowMenu,
+                child: const Icon(CupertinoIcons.ellipsis),
+              ),
             ],
           ),
         ),
+        child: SafeArea(child: _buildBody()),
       );
     }
 
@@ -494,153 +566,62 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _handleBack(),
           ),
-          title: Text(widget.noteId == null ? 'New Note' : 'Edit Note'),
+          title: Text(_isPreviewMode ? 'Preview' : 'Edit'),
           actions: [
+            if (!_isPreviewMode)
+              IconButton(
+                icon: const Icon(Icons.save),
+                onPressed: () => _saveNote(),
+              ),
             IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: () => _saveNote(),
+              icon: const Icon(Icons.more_vert),
+              onPressed: _showOverflowMenu,
             ),
           ],
         ),
-        body: _buildEditorContent(),
+        body: _buildBody(),
       ),
     );
   }
 
-  Widget _buildEditorContent() {
-    return Expanded(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title input
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                hintText: 'Note Title',
-                border: PlatformUtils.isIOS ? null : const OutlineInputBorder(),
-              ),
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  Widget _buildBody() {
+    if (_isPreviewMode) {
+      // Preview mode: read-only Quill, double-tap to edit
+      return GestureDetector(
+        onDoubleTap: () {
+          setState(() => _isPreviewMode = false);
+        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: QuillEditor.basic(
+            controller: _quillController,
+            config: const QuillEditorConfig(
+              showCursor: false,
+              enableInteractiveSelection: false,
             ),
-            const SizedBox(height: 16),
-            
-            // Note type and color selector
-            Row(
-              children: [
-                // Note type chip
-                if (PlatformUtils.isIOS)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemGrey5,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      _noteType == NoteType.sermon ? 'Sermon' : 'Journal',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  )
-                else
-                  Chip(
-                    label: Text(_noteType == NoteType.sermon ? 'Sermon' : 'Journal'),
-                  ),
-                const SizedBox(width: 8),
-                
-                // Color picker button
-                GestureDetector(
-                  onTap: _showColorPicker,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Color(int.parse(_selectedColor.replaceFirst('#', '0x'))),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.grey),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Sermon date picker (only for sermon notes)
-            if (_noteType == NoteType.sermon) ...[
-              _buildSermonDatePicker(),
-              const SizedBox(height: 16),
-            ],
-            
-            // Tags
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ..._tags.map((tag) => PlatformUtils.isIOS
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(tag, style: const TextStyle(fontSize: 12)),
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () => _removeTag(tag),
-                              child: const Icon(CupertinoIcons.xmark_circle_fill, size: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Chip(
-                        label: Text(tag),
-                        onDeleted: () => _removeTag(tag),
-                      ),
-                ),
-                // Add tag button
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: _tagController,
-                    decoration: InputDecoration(
-                      hintText: 'Add tag',
-                      isDense: true,
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: _addTag,
-                      ),
-                    ),
-                    onSubmitted: (_) => _addTag(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Quill toolbar
-            QuillSimpleToolbar(
-              controller: _quillController,
-              config: const QuillSimpleToolbarConfig(),
-            ),
-            const SizedBox(height: 8),
-            
-            // Quill editor
-            Container(
-              height: 400,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: QuillEditor.basic(
-                controller: _quillController,
-                config: const QuillEditorConfig(),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      );
+    }
+
+    // Edit mode: toolbar + editable Quill
+    return Column(
+      children: [
+        QuillSimpleToolbar(
+          controller: _quillController,
+          config: const QuillSimpleToolbarConfig(),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: QuillEditor.basic(
+              controller: _quillController,
+              config: const QuillEditorConfig(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

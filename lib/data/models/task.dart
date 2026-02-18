@@ -17,12 +17,12 @@ class Task {
   /// Optional description
   String? description;
 
-  /// Due date for the task
+  /// Task date (optional — some tasks don't require a date)
   @Index()
-  late DateTime dueDate;
+  DateTime? dueDate;
 
   /// Reminder time (when to fire notification)
-  late DateTime reminderTime;
+  DateTime? reminderTime;
 
   /// Priority level
   @enumerated
@@ -55,4 +55,7 @@ class Task {
 
   /// Recurrence rule (embedded, nullable)
   RecurrenceRule? recurrenceRule;
+
+  /// Auto-generate next occurrence without confirmation dialog
+  bool autoGenerateNext = false;
 }

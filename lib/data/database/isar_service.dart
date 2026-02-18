@@ -4,6 +4,8 @@ import '../models/sermon_note.dart';
 import '../models/journal_note.dart';
 import '../models/app_settings.dart';
 import '../models/task.dart';
+import '../models/note.dart';
+import '../models/note_template.dart';
 
 /// Service for managing Isar database instance
 class IsarService {
@@ -35,10 +37,12 @@ class IsarService {
         JournalNoteSchema,
         AppSettingsSchema,
         TaskSchema,
+        NoteSchema,
+        NoteTemplateSchema,
       ],
       directory: directory,
       name: 'notes_app_db',
-      inspector: true, // Enable Isar Inspector for debugging
+      inspector: true, // [DEBUG] Enable Isar Inspector for debugging
     );
 
     return _isar!;

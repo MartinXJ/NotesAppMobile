@@ -52,6 +52,81 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
+  Future<void> _handleToggleComplete(Task task, TaskService taskService) async {
+    final result = await taskService.toggleComplete(task.id);
+
+    if (result == null || !mounted) return;
+
+    if (result.generated) {
+      // Auto-generated, just show toast
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Recurring task completed. Next "${result.taskTitle}" created.'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      // Needs confirmation — show dialog
+      bool alwaysGenerate = false;
+      final shouldGenerate = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Recurring Task Completed'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('"${result.taskTitle}" is a recurring task. Generate the next occurrence?'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: alwaysGenerate,
+                  onChanged: (v) => setDialogState(() => alwaysGenerate = v ?? false),
+                  title: const Text('Always generate for this task'),
+                  subtitle: const Text("Don't ask again"),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('No'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Generate Next'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (shouldGenerate == true && mounted) {
+        await taskService.confirmGenerateNext(
+          result.taskId,
+          alwaysGenerate: alwaysGenerate,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Next "${result.taskTitle}" created.'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recurring task completed.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   void _showTaskOptions(Task task, TaskService taskService) {
     showModalBottomSheet(
       context: context,
@@ -103,10 +178,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     ],
                   ),
                 );
-                if (confirmed == true && mounted) {
+                if (confirmed == true && context.mounted) {
                   final taskService = Provider.of<TaskService>(context, listen: false);
                   await taskService.archiveCompleted();
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Completed tasks archived')),
                     );
@@ -204,7 +279,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   Widget _buildTaskTile(Task task, TaskService taskService) {
-    final isOverdue = !task.isCompleted && task.dueDate.isBefore(DateTime.now());
+    final isOverdue = !task.isCompleted && task.dueDate != null && task.dueDate!.isBefore(DateTime.now());
 
     return Dismissible(
       key: ValueKey(task.id),
@@ -233,7 +308,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       child: ListTile(
         leading: Checkbox(
           value: task.isCompleted,
-          onChanged: (_) => taskService.toggleComplete(task.id),
+          onChanged: (_) => _handleToggleComplete(task, taskService),
         ),
         title: Text(
           task.title,
@@ -244,16 +319,18 @@ class _TaskListScreenState extends State<TaskListScreen> {
         ),
         subtitle: Row(
           children: [
-            Icon(Icons.calendar_today, size: 12, color: isOverdue ? Colors.red : null),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                DateFormat('MMM d, yyyy – h:mm a').format(task.dueDate),
-                style: TextStyle(fontSize: 12, color: isOverdue ? Colors.red : null),
-                overflow: TextOverflow.ellipsis,
+            if (task.dueDate != null) ...[
+              Icon(Icons.calendar_today, size: 12, color: isOverdue ? Colors.red : null),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  DateFormat('MMM d, yyyy – h:mm a').format(task.dueDate!),
+                  style: TextStyle(fontSize: 12, color: isOverdue ? Colors.red : null),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
+            ],
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(

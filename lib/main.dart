@@ -10,11 +10,12 @@ import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/task_editor_screen.dart';
 import 'data/database/isar_service.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/migration_service.dart';
 import 'domain/services/theme_service.dart';
 import 'domain/services/task_service.dart';
-import 'domain/repositories/notes_repository.dart';
+import 'domain/repositories/note_repository.dart';
 import 'domain/repositories/task_repository.dart';
-import 'data/repositories/notes_repository_impl.dart';
+import 'data/repositories/note_repository_impl.dart';
 import 'data/repositories/task_repository_impl.dart';
 
 /// Global navigator key for deep linking from notifications
@@ -22,16 +23,23 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Isar database
   await IsarService.getInstance();
-  
+
+  // Run migration from SermonNote/JournalNote to unified Note
+  await MigrationService.migrateIfNeeded();
+
   // Initialize notifications
   await NotificationService.initialize();
-  
+
   final taskRepository = TaskRepositoryImpl();
   final taskService = TaskService(taskRepository);
-  
+  final noteRepository = NoteRepositoryImpl();
+
+  // Seed default templates
+  await noteRepository.seedDefaultTemplates();
+
   // Load tasks and reschedule notifications on startup
   await taskService.loadTasks();
   await NotificationService.rescheduleAll(taskService.tasks);
@@ -44,12 +52,12 @@ void main() async {
       ),
     );
   };
-  
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeService()),
-        Provider<NotesRepository>(create: (_) => NotesRepositoryImpl()),
+        Provider<NoteRepository>(create: (_) => noteRepository),
         Provider<TaskRepository>(create: (_) => taskRepository),
         ChangeNotifierProvider.value(value: taskService),
       ],
@@ -64,8 +72,7 @@ class NotesApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context);
-    
-    // Use Cupertino app for iOS, Material app for Android
+
     if (PlatformUtils.isIOS) {
       return CupertinoApp(
         title: 'SoloNotes',
@@ -76,7 +83,6 @@ class NotesApp extends StatelessWidget {
       );
     }
 
-    // Material Design for Android
     return MaterialApp(
       title: 'SoloNotes',
       theme: AppTheme.lightTheme,

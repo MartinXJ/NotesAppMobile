@@ -3,14 +3,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
-import 'dart:convert';
 import '../../core/utils/platform_utils.dart';
+import '../../core/utils/note_utils.dart';
 import '../../domain/services/theme_service.dart';
 import '../../domain/services/search_service.dart';
 import '../../domain/services/filter_service.dart';
-import '../../domain/repositories/notes_repository.dart';
-import '../../data/models/sermon_note.dart';
-import '../../data/models/journal_note.dart';
+import '../../domain/repositories/note_repository.dart';
+import '../../data/models/note.dart';
+import '../../data/models/note_template.dart';
 import '../../data/models/enums.dart';
 import '../widgets/note_card.dart';
 import '../widgets/filter_panel.dart';
@@ -36,9 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
   }
 
   @override
@@ -48,61 +46,37 @@ class _HomeScreenState extends State<HomeScreen> {
         tabBar: CupertinoTabBar(
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.doc_text),
-              label: 'Notes',
-            ),
+                icon: Icon(CupertinoIcons.doc_text), label: 'Notes'),
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.search),
-              label: 'Search',
-            ),
+                icon: Icon(CupertinoIcons.search), label: 'Search'),
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.checkmark_square),
-              label: 'Tasks',
-            ),
+                icon: Icon(CupertinoIcons.checkmark_square), label: 'Tasks'),
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.settings),
-              label: 'Settings',
-            ),
+                icon: Icon(CupertinoIcons.settings), label: 'Settings'),
           ],
         ),
-        tabBuilder: (context, index) {
-          return CupertinoTabView(
-            builder: (context) => _screens[index],
-          );
-        },
+        tabBuilder: (context, index) =>
+            CupertinoTabView(builder: (context) => _screens[index]),
       );
     }
 
-    // Android Material Design
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.note),
-            label: 'Notes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.checklist),
-            label: 'Tasks',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+          NavigationDestination(icon: Icon(Icons.note), label: 'Notes'),
+          NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
+          NavigationDestination(icon: Icon(Icons.checklist), label: 'Tasks'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
   }
 }
 
-/// Notes list view with real data
+/// Notes list view with unified Note model
 class NotesListView extends StatefulWidget {
   const NotesListView({super.key});
 
@@ -111,12 +85,12 @@ class NotesListView extends StatefulWidget {
 }
 
 class _NotesListViewState extends State<NotesListView> {
-  List<dynamic> _allNotes = [];
+  List<Note> _notes = [];
   bool _isLoading = true;
-  NoteType? _selectedFilter; // null = all, NoteType.sermon, NoteType.journal
   NoteFilter _advancedFilter = NoteFilter();
   final FilterService _filterService = FilterService();
   List<String> _availableTags = [];
+  List<String> _selectedTagFilters = [];
 
   @override
   void initState() {
@@ -126,48 +100,51 @@ class _NotesListViewState extends State<NotesListView> {
   }
 
   Future<void> _loadTags() async {
-    final repository = Provider.of<NotesRepository>(context, listen: false);
+    final repository = Provider.of<NoteRepository>(context, listen: false);
     final tags = await repository.getAllTags();
     if (mounted) setState(() => _availableTags = tags);
   }
 
   Future<void> _loadNotes() async {
     setState(() => _isLoading = true);
-    
-    final repository = Provider.of<NotesRepository>(context, listen: false);
-    
-    // Fetch notes based on filter
-    List<dynamic> allNotes;
-    
-    if (_selectedFilter == NoteType.sermon) {
-      allNotes = await repository.getAllSermonNotes();
-    } else if (_selectedFilter == NoteType.journal) {
-      allNotes = await repository.getAllJournalNotes();
+    final repository = Provider.of<NoteRepository>(context, listen: false);
+
+    List<Note> notes;
+    if (_selectedTagFilters.isEmpty &&
+        _advancedFilter.color == null &&
+        _advancedFilter.startDate == null) {
+      notes = await repository.getAllNotes();
     } else {
-      // Fetch both sermon and journal notes
-      final sermonNotes = await repository.getAllSermonNotes();
-      final journalNotes = await repository.getAllJournalNotes();
-      allNotes = <dynamic>[...sermonNotes, ...journalNotes];
+      notes = await _filterService.applyFilters(NoteFilter(
+        tags: _selectedTagFilters.isEmpty ? null : _selectedTagFilters,
+        color: _advancedFilter.color,
+        startDate: _advancedFilter.startDate,
+        endDate: _advancedFilter.endDate,
+        dateFilterType: _advancedFilter.dateFilterType,
+      ));
     }
-    
-    // Sort by modified date (most recent first)
-    allNotes.sort((a, b) {
-      final aDate = a is SermonNote ? a.modifiedAt : (a as JournalNote).modifiedAt;
-      final bDate = b is SermonNote ? b.modifiedAt : (b as JournalNote).modifiedAt;
-      return bDate.compareTo(aDate);
-    });
-    
-    setState(() {
-      _allNotes = allNotes;
-      _isLoading = false;
-    });
+
+    if (mounted) {
+      setState(() {
+        _notes = notes;
+        _isLoading = false;
+      });
+    }
   }
 
-  void _onFilterChanged(NoteType? filter) {
+  void _onTagFilterChanged(String tag) {
     setState(() {
-      _selectedFilter = filter;
-      _advancedFilter = NoteFilter(type: filter);
+      if (_selectedTagFilters.contains(tag)) {
+        _selectedTagFilters.remove(tag);
+      } else {
+        _selectedTagFilters.add(tag);
+      }
     });
+    _loadNotes();
+  }
+
+  void _clearTagFilters() {
+    setState(() => _selectedTagFilters.clear());
     _loadNotes();
   }
 
@@ -188,9 +165,9 @@ class _NotesListViewState extends State<NotesListView> {
             onFilterChanged: (filter) {
               setState(() {
                 _advancedFilter = filter;
-                _selectedFilter = filter.type;
+                _selectedTagFilters = List.from(filter.tags ?? []);
               });
-              _loadNotesWithFilter(filter);
+              _loadNotes();
             },
           ),
         ),
@@ -198,185 +175,88 @@ class _NotesListViewState extends State<NotesListView> {
     );
   }
 
-  Future<void> _loadNotesWithFilter(NoteFilter filter) async {
-    setState(() => _isLoading = true);
-    final results = await _filterService.applyFilters(filter);
-    if (mounted) {
-      setState(() {
-        _allNotes = results;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _navigateToEditor({int? noteId, NoteType? noteType, bool isSermon = false}) async {
+  Future<void> _navigateToEditor({int? noteId, NoteTemplate? template}) async {
     final result = await Navigator.of(context).push(
       PlatformUtils.isIOS
           ? CupertinoPageRoute(
               builder: (context) => NoteEditorScreen(
-                noteId: noteId,
-                initialNoteType: noteType,
-                isSermon: isSermon,
-              ),
-            )
+                  noteId: noteId, template: template))
           : MaterialPageRoute(
               builder: (context) => NoteEditorScreen(
-                noteId: noteId,
-                initialNoteType: noteType,
-                isSermon: isSermon,
-              ),
-            ),
+                  noteId: noteId, template: template)),
     );
-    
-    // Reload notes if a note was saved
     if (result == true) {
       _loadNotes();
+      _loadTags();
     }
   }
 
-  void _showNoteTypeDialog() {
-    if (PlatformUtils.isIOS) {
-      showCupertinoModalPopup(
-        context: context,
-        builder: (context) => CupertinoActionSheet(
-          title: const Text('Add Note'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.journal, isSermon: false);
-              },
-              child: const Text('Journal Note'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
-              },
-              child: const Text('Sermon Note'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Add Note'),
-          children: [
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.journal, isSermon: false);
-              },
-              child: const Text('Journal Note'),
-            ),
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToEditor(noteType: NoteType.sermon, isSermon: true);
-              },
-              child: const Text('Sermon Note'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  String _getPreview(String content) {
-    // Try to extract plain text from Quill JSON content
-    if (content.isEmpty) return 'No content';
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is List) {
-        final buffer = StringBuffer();
-        for (final op in decoded) {
-          if (op is Map && op.containsKey('insert') && op['insert'] is String) {
-            buffer.write(op['insert']);
+  void _showTemplatePicker() {
+    final repository = Provider.of<NoteRepository>(context, listen: false);
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => FutureBuilder<List<NoteTemplate>>(
+        future: repository.getAllTemplates(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()));
           }
-        }
-        final plain = buffer.toString().trim();
-        if (plain.isEmpty) return 'No content';
-        return plain.length > 100 ? '${plain.substring(0, 100)}...' : plain;
-      }
-    } catch (_) {}
-    // Fallback: raw content
-    return content.length > 100 ? '${content.substring(0, 100)}...' : content;
-  }
-
-  Widget _buildFilterChips() {
-    if (PlatformUtils.isIOS) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            _buildCupertinoFilterChip('All', _selectedFilter == null),
-            const SizedBox(width: 8),
-            _buildCupertinoFilterChip('Journal', _selectedFilter == NoteType.journal),
-            const SizedBox(width: 8),
-            _buildCupertinoFilterChip('Sermons', _selectedFilter == NoteType.sermon),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        children: [
-          FilterChip(
-            label: const Text('All'),
-            selected: _selectedFilter == null,
-            onSelected: (_) => _onFilterChanged(null),
-          ),
-          FilterChip(
-            label: const Text('Journal'),
-            selected: _selectedFilter == NoteType.journal,
-            onSelected: (_) => _onFilterChanged(NoteType.journal),
-          ),
-          FilterChip(
-            label: const Text('Sermons'),
-            selected: _selectedFilter == NoteType.sermon,
-            onSelected: (_) => _onFilterChanged(NoteType.sermon),
-          ),
-        ],
+          final templates = snapshot.data!;
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('Choose Template',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                ...templates.map((t) => ListTile(
+                      leading: const Icon(Icons.description),
+                      title: Text(t.name),
+                      subtitle: Text(t.defaultTags.isEmpty
+                          ? 'No default tags'
+                          : t.defaultTags.join(', ')),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _navigateToEditor(template: t);
+                      },
+                    )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildCupertinoFilterChip(String label, bool isSelected) {
-    return GestureDetector(
-      onTap: () {
-        if (label == 'All') {
-          _onFilterChanged(null);
-        } else if (label == 'Journal') {
-          _onFilterChanged(NoteType.journal);
-        } else if (label == 'Sermons') {
-          _onFilterChanged(NoteType.sermon);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? CupertinoColors.activeBlue
-              : CupertinoColors.systemGrey5,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected
-                ? CupertinoColors.white
-                : CupertinoColors.label,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-          ),
+  Widget _buildTagFilterChips() {
+    if (_availableTags.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            FilterChip(
+              label: const Text('All'),
+              selected: _selectedTagFilters.isEmpty,
+              onSelected: (_) => _clearTagFilters(),
+            ),
+            const SizedBox(width: 8),
+            ..._availableTags.map((tag) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(tag),
+                    selected: _selectedTagFilters.contains(tag),
+                    onSelected: (_) => _onTagFilterChanged(tag),
+                  ),
+                )),
+          ],
         ),
       ),
     );
@@ -386,94 +266,17 @@ class _NotesListViewState extends State<NotesListView> {
   Widget build(BuildContext context) {
     if (PlatformUtils.isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Notes'),
-        ),
+        navigationBar: const CupertinoNavigationBar(middle: Text('Notes')),
         child: SafeArea(
           child: Column(
             children: [
-              _buildFilterChips(),
+              _buildTagFilterChips(),
               Expanded(
                 child: _isLoading
                     ? const Center(child: CupertinoActivityIndicator())
-                    : _allNotes.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.doc_text,
-                                  size: 64,
-                                  color: CupertinoColors.systemGrey,
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'No notes yet',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: CupertinoColors.systemGrey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: _allNotes.length,
-                            itemBuilder: (context, index) {
-                              final note = _allNotes[index];
-                              
-                              if (note is FilterResult) {
-                                return NoteCard(
-                                  id: note.id,
-                                  title: note.title,
-                                  preview: _getPreview(note.content),
-                                  modifiedAt: note.modifiedAt,
-                                  sermonDate: note.sermonDate,
-                                  colorHex: note.colorHex,
-                                  tags: note.tags,
-                                  noteType: note.isSermon ? NoteType.sermon : NoteType.journal,
-                                  onTap: () => _navigateToEditor(
-                                    noteId: note.id,
-                                    noteType: note.isSermon ? NoteType.sermon : NoteType.journal,
-                                    isSermon: note.isSermon,
-                                  ),
-                                );
-                              } else if (note is SermonNote) {
-                                return NoteCard(
-                                  id: note.id,
-                                  title: note.title,
-                                  preview: _getPreview(note.plainTextContent),
-                                  modifiedAt: note.modifiedAt,
-                                  sermonDate: note.sermonDate,
-                                  colorHex: note.colorHex,
-                                  tags: note.tags,
-                                  noteType: NoteType.sermon,
-                                  onTap: () => _navigateToEditor(
-                                    noteId: note.id,
-                                    noteType: NoteType.sermon,
-                                    isSermon: true,
-                                  ),
-                                );
-                              } else if (note is JournalNote) {
-                                return NoteCard(
-                                  id: note.id,
-                                  title: note.title,
-                                  preview: _getPreview(note.plainTextContent),
-                                  modifiedAt: note.modifiedAt,
-                                  colorHex: note.colorHex,
-                                  tags: note.tags,
-                                  noteType: NoteType.journal,
-                                  onTap: () => _navigateToEditor(
-                                    noteId: note.id,
-                                    noteType: NoteType.journal,
-                                    isSermon: false,
-                                  ),
-                                );
-                              }
-                              
-                              return const SizedBox.shrink();
-                            },
-                          ),
+                    : _notes.isEmpty
+                        ? _buildEmptyState()
+                        : _buildNotesList(),
               ),
             ],
           ),
@@ -487,7 +290,9 @@ class _NotesListViewState extends State<NotesListView> {
         actions: [
           IconButton(
             icon: Badge(
-              isLabelVisible: _advancedFilter.tags != null || _advancedFilter.color != null || _advancedFilter.startDate != null,
+              isLabelVisible: _advancedFilter.tags != null ||
+                  _advancedFilter.color != null ||
+                  _advancedFilter.startDate != null,
               child: const Icon(Icons.filter_list),
             ),
             onPressed: _showFilterPanel,
@@ -496,99 +301,67 @@ class _NotesListViewState extends State<NotesListView> {
       ),
       body: Column(
         children: [
-          _buildFilterChips(),
+          _buildTagFilterChips(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _allNotes.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.note,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No notes yet',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color: Theme.of(context).colorScheme.outline,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _allNotes.length,
-                        itemBuilder: (context, index) {
-                          final note = _allNotes[index];
-                          
-                          if (note is FilterResult) {
-                            return NoteCard(
-                              id: note.id,
-                              title: note.title,
-                              preview: _getPreview(note.content),
-                              modifiedAt: note.modifiedAt,
-                              sermonDate: note.sermonDate,
-                              colorHex: note.colorHex,
-                              tags: note.tags,
-                              noteType: note.isSermon ? NoteType.sermon : NoteType.journal,
-                              onTap: () => _navigateToEditor(
-                                noteId: note.id,
-                                noteType: note.isSermon ? NoteType.sermon : NoteType.journal,
-                                isSermon: note.isSermon,
-                              ),
-                            );
-                          } else if (note is SermonNote) {
-                            return NoteCard(
-                              id: note.id,
-                              title: note.title,
-                              preview: _getPreview(note.plainTextContent),
-                              modifiedAt: note.modifiedAt,
-                              sermonDate: note.sermonDate,
-                              colorHex: note.colorHex,
-                              tags: note.tags,
-                              noteType: NoteType.sermon,
-                              onTap: () => _navigateToEditor(
-                                noteId: note.id,
-                                noteType: NoteType.sermon,
-                                isSermon: true,
-                              ),
-                            );
-                          } else if (note is JournalNote) {
-                            return NoteCard(
-                              id: note.id,
-                              title: note.title,
-                              preview: _getPreview(note.plainTextContent),
-                              modifiedAt: note.modifiedAt,
-                              colorHex: note.colorHex,
-                              tags: note.tags,
-                              noteType: NoteType.journal,
-                              onTap: () => _navigateToEditor(
-                                noteId: note.id,
-                                noteType: NoteType.journal,
-                                isSermon: false,
-                              ),
-                            );
-                          }
-                          
-                          return const SizedBox.shrink();
-                        },
-                      ),
+                : _notes.isEmpty
+                    ? _buildEmptyState()
+                    : _buildNotesList(),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showNoteTypeDialog,
-        child: const Icon(Icons.add),
+      floatingActionButton: GestureDetector(
+        onLongPress: _showTemplatePicker,
+        child: FloatingActionButton(
+          onPressed: () => _navigateToEditor(),
+          child: const Icon(Icons.add),
+        ),
       ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.note, size: 64,
+              color: Theme.of(context).colorScheme.outline),
+          const SizedBox(height: 16),
+          Text('No notes yet',
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(color: Theme.of(context).colorScheme.outline)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesList() {
+    return ListView.builder(
+      itemCount: _notes.length,
+      itemBuilder: (context, index) {
+        final note = _notes[index];
+        final preview = note.plainTextContent.length > 100
+            ? '${note.plainTextContent.substring(0, 100)}...'
+            : note.plainTextContent;
+
+        return NoteCard(
+          id: note.id,
+          displayTitle: getDisplayTitle(note),
+          preview: preview.isEmpty ? 'No content' : preview,
+          modifiedAt: note.modifiedAt,
+          date: note.date,
+          colorHex: note.colorHex,
+          tags: note.tags,
+          onTap: () => _navigateToEditor(noteId: note.id),
+        );
+      },
     );
   }
 }
 
-/// Search view with real-time search and result highlighting
+/// Search view with real-time search
 class SearchView extends StatefulWidget {
   const SearchView({super.key});
 
@@ -619,26 +392,21 @@ class _SearchViewState extends State<SearchView> {
 
   Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) {
-      setState(() {
-        _results = [];
-        _isSearching = false;
-      });
+      setState(() { _results = []; _isSearching = false; });
       return;
     }
-
     setState(() => _isSearching = true);
     final results = await _searchService.search(query);
     if (mounted) {
-      setState(() {
-        _results = results;
-        _isSearching = false;
-      });
+      setState(() { _results = results; _isSearching = false; });
     }
   }
 
   Widget _highlightText(String text, String query, TextStyle? baseStyle) {
-    if (query.isEmpty) return Text(text, style: baseStyle, maxLines: 2, overflow: TextOverflow.ellipsis);
-    
+    if (query.isEmpty) {
+      return Text(text, style: baseStyle, maxLines: 2,
+          overflow: TextOverflow.ellipsis);
+    }
     final lowerText = text.toLowerCase();
     final lowerQuery = query.toLowerCase();
     final spans = <TextSpan>[];
@@ -651,38 +419,31 @@ class _SearchViewState extends State<SearchView> {
         break;
       }
       if (index > start) {
-        spans.add(TextSpan(text: text.substring(start, index), style: baseStyle));
+        spans.add(TextSpan(
+            text: text.substring(start, index), style: baseStyle));
       }
       spans.add(TextSpan(
         text: text.substring(index, index + query.length),
         style: baseStyle?.copyWith(
           backgroundColor: Colors.yellow.withValues(alpha: 0.4),
           fontWeight: FontWeight.bold,
-        ) ?? const TextStyle(backgroundColor: Colors.yellow, fontWeight: FontWeight.bold),
+        ),
       ));
       start = index + query.length;
     }
 
-    return RichText(text: TextSpan(children: spans), maxLines: 2, overflow: TextOverflow.ellipsis);
+    return RichText(
+        text: TextSpan(children: spans),
+        maxLines: 2, overflow: TextOverflow.ellipsis);
   }
 
   void _navigateToNote(SearchResult result) {
     Navigator.of(context).push(
       PlatformUtils.isIOS
           ? CupertinoPageRoute(
-              builder: (context) => NoteEditorScreen(
-                noteId: result.id,
-                initialNoteType: result.isSermon ? NoteType.sermon : NoteType.journal,
-                isSermon: result.isSermon,
-              ),
-            )
+              builder: (context) => NoteEditorScreen(noteId: result.id))
           : MaterialPageRoute(
-              builder: (context) => NoteEditorScreen(
-                noteId: result.id,
-                initialNoteType: result.isSermon ? NoteType.sermon : NoteType.journal,
-                isSermon: result.isSermon,
-              ),
-            ),
+              builder: (context) => NoteEditorScreen(noteId: result.id)),
     );
   }
 
@@ -690,9 +451,7 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     if (PlatformUtils.isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Search'),
-        ),
+        navigationBar: const CupertinoNavigationBar(middle: Text('Search')),
         child: SafeArea(
           child: Column(
             children: [
@@ -744,28 +503,32 @@ class _SearchViewState extends State<SearchView> {
     if (_isSearching) {
       return const Center(child: CircularProgressIndicator());
     }
-
     if (query.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search, size: 64, color: Theme.of(context).colorScheme.outline),
+            Icon(Icons.search, size: 64,
+                color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 16),
-            Text('Search your notes', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.outline)),
+            Text('Search your notes',
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline)),
           ],
         ),
       );
     }
-
     if (_results.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Theme.of(context).colorScheme.outline),
+            Icon(Icons.search_off, size: 64,
+                color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 16),
-            Text('No results found', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.outline)),
+            Text('No results found',
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline)),
           ],
         ),
       );
@@ -775,13 +538,14 @@ class _SearchViewState extends State<SearchView> {
       itemCount: _results.length,
       itemBuilder: (context, index) {
         final result = _results[index];
-        final preview = result.content.length > 120 ? '${result.content.substring(0, 120)}...' : result.content;
-
         return ListTile(
-          leading: Icon(result.isSermon ? Icons.book : Icons.note),
-          title: _highlightText(result.title.isEmpty ? 'Untitled' : result.title, query, Theme.of(context).textTheme.titleMedium),
-          subtitle: _highlightText(preview, query, Theme.of(context).textTheme.bodySmall),
-          trailing: Text(DateFormat('MMM d').format(result.modifiedAt), style: Theme.of(context).textTheme.bodySmall),
+          leading: const Icon(Icons.note),
+          title: _highlightText(result.displayTitle, query,
+              Theme.of(context).textTheme.titleMedium),
+          subtitle: _highlightText(result.contentPreview, query,
+              Theme.of(context).textTheme.bodySmall),
+          trailing: Text(DateFormat('MMM d').format(result.modifiedAt),
+              style: Theme.of(context).textTheme.bodySmall),
           onTap: () => _navigateToNote(result),
         );
       },
@@ -789,7 +553,7 @@ class _SearchViewState extends State<SearchView> {
   }
 }
 
-/// Placeholder for settings view
+/// Settings view
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 
@@ -797,9 +561,7 @@ class SettingsView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (PlatformUtils.isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Settings'),
-        ),
+        navigationBar: const CupertinoNavigationBar(middle: Text('Settings')),
         child: SafeArea(
           child: ListView(
             children: [
@@ -819,9 +581,7 @@ class SettingsView extends StatelessWidget {
                   CupertinoListTile(
                     title: const Text('Google Account'),
                     trailing: const CupertinoListTileChevron(),
-                    onTap: () {
-                      // TODO: Navigate to account settings
-                    },
+                    onTap: () {},
                   ),
                 ],
               ),
@@ -832,9 +592,7 @@ class SettingsView extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
           ListTile(
@@ -848,9 +606,7 @@ class SettingsView extends StatelessWidget {
             leading: const Icon(Icons.account_circle),
             title: const Text('Google Account'),
             subtitle: const Text('Sign in to sync your notes'),
-            onTap: () {
-              // TODO: Navigate to account settings
-            },
+            onTap: () {},
           ),
         ],
       ),

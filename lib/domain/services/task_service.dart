@@ -4,12 +4,25 @@ import '../../data/models/enums.dart';
 import '../../data/models/recurrence_rule.dart';
 import '../repositories/task_repository.dart';
 
+/// Result when completing a recurring task
+class RecurringCompleteResult {
+  final String taskTitle;
+  final bool generated;
+  final int taskId;
+
+  RecurringCompleteResult({
+    required this.taskTitle,
+    required this.generated,
+    required this.taskId,
+  });
+}
+
 /// Service for task management business logic
 class TaskService extends ChangeNotifier {
   final TaskRepository _repository;
 
   List<Task> _tasks = [];
-  TaskFilter _filter = TaskFilter.all;
+  TaskFilter _filter = TaskFilter.pending;
   TaskSort _sort = TaskSort.dueDate;
 
   TaskService(this._repository);
@@ -36,7 +49,12 @@ class TaskService extends ChangeNotifier {
     // Apply sort
     switch (_sort) {
       case TaskSort.dueDate:
-        filtered.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        filtered.sort((a, b) {
+          if (a.dueDate == null && b.dueDate == null) return 0;
+          if (a.dueDate == null) return 1;
+          if (b.dueDate == null) return -1;
+          return a.dueDate!.compareTo(b.dueDate!);
+        });
         break;
       case TaskSort.priority:
         filtered.sort((a, b) => b.priority.index.compareTo(a.priority.index));
@@ -96,20 +114,42 @@ class TaskService extends ChangeNotifier {
     await loadTasks();
   }
 
-  Future<void> toggleComplete(int id) async {
+  /// Result of completing a recurring task
+  /// null = not recurring, true = auto-generated, false = needs confirmation
+  Future<RecurringCompleteResult?> toggleComplete(int id) async {
     final task = await _repository.getTaskById(id);
-    if (task == null) return;
+    if (task == null) return null;
 
     if (!task.isCompleted) {
       task.isCompleted = true;
       task.completedAt = DateTime.now();
       await _repository.updateTask(task);
 
-      // Generate next occurrence for recurring tasks
-      if (task.recurrenceRule != null && task.recurrenceRule!.type != RecurrenceType.none) {
-        final next = generateNextOccurrence(task);
-        if (next != null) {
-          await _repository.createTask(next);
+      // Check if this is a recurring task
+      final rule = task.recurrenceRule;
+      final isRecurring = rule != null && rule.type.index > 0;
+
+      if (isRecurring) {
+        if (task.autoGenerateNext) {
+          // Auto-generate without asking
+          final next = generateNextOccurrence(task);
+          if (next != null) {
+            await _repository.createTask(next);
+          }
+          await loadTasks();
+          return RecurringCompleteResult(
+            taskTitle: task.title,
+            generated: true,
+            taskId: id,
+          );
+        } else {
+          // Needs confirmation from UI
+          await loadTasks();
+          return RecurringCompleteResult(
+            taskTitle: task.title,
+            generated: false,
+            taskId: id,
+          );
         }
       }
     } else {
@@ -118,6 +158,26 @@ class TaskService extends ChangeNotifier {
       await _repository.updateTask(task);
     }
 
+    await loadTasks();
+    return null;
+  }
+
+  /// Generate and save the next occurrence for a recurring task
+  Future<void> confirmGenerateNext(int completedTaskId, {bool alwaysGenerate = false}) async {
+    final task = await _repository.getTaskById(completedTaskId);
+    if (task == null) return;
+
+    // Save the "always" preference
+    if (alwaysGenerate) {
+      task.autoGenerateNext = true;
+      await _repository.updateTask(task);
+    }
+
+    final next = generateNextOccurrence(task);
+    if (next != null) {
+      if (alwaysGenerate) next.autoGenerateNext = true;
+      await _repository.createTask(next);
+    }
     await loadTasks();
   }
 
@@ -134,14 +194,18 @@ class TaskService extends ChangeNotifier {
   /// Get tasks for a specific calendar date
   List<Task> getTasksForDate(DateTime date) {
     return _tasks.where((t) =>
-        t.dueDate.year == date.year &&
-        t.dueDate.month == date.month &&
-        t.dueDate.day == date.day).toList();
+        t.dueDate != null &&
+        t.dueDate!.year == date.year &&
+        t.dueDate!.month == date.month &&
+        t.dueDate!.day == date.day).toList();
   }
 
   /// Get all dates that have tasks (for calendar indicators)
   Set<DateTime> getDatesWithTasks() {
-    return _tasks.map((t) => DateTime(t.dueDate.year, t.dueDate.month, t.dueDate.day)).toSet();
+    return _tasks
+        .where((t) => t.dueDate != null)
+        .map((t) => DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day))
+        .toSet();
   }
 
   void setFilter(TaskFilter filter) {
@@ -162,23 +226,27 @@ class TaskService extends ChangeNotifier {
     final nextDueDate = _computeNextDueDate(completedTask.dueDate, rule);
     if (nextDueDate == null) return null;
 
-    final timeDiff = nextDueDate.difference(completedTask.dueDate);
+    final timeDiff = completedTask.dueDate != null
+        ? nextDueDate.difference(completedTask.dueDate!)
+        : Duration.zero;
 
     return Task()
       ..title = completedTask.title
       ..description = completedTask.description
       ..dueDate = nextDueDate
-      ..reminderTime = completedTask.reminderTime.add(timeDiff)
+      ..reminderTime = completedTask.reminderTime?.add(timeDiff)
       ..priority = completedTask.priority
       ..isCompleted = false
       ..createdAt = DateTime.now()
       ..modifiedAt = DateTime.now()
       ..isDeleted = false
       ..hasReminder = completedTask.hasReminder
-      ..recurrenceRule = rule;
+      ..recurrenceRule = rule
+      ..autoGenerateNext = completedTask.autoGenerateNext;
   }
 
-  DateTime? _computeNextDueDate(DateTime current, RecurrenceRule rule) {
+  DateTime? _computeNextDueDate(DateTime? current, RecurrenceRule rule) {
+    if (current == null) return null;
     switch (rule.type) {
       case RecurrenceType.daily:
         return current.add(const Duration(days: 1));

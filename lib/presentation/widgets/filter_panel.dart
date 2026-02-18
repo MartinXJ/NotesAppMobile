@@ -3,7 +3,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/platform_utils.dart';
 import '../../domain/services/filter_service.dart';
-import '../../data/models/enums.dart';
 
 /// Filter panel shown as a bottom sheet
 class FilterPanel extends StatefulWidget {
@@ -23,7 +22,6 @@ class FilterPanel extends StatefulWidget {
 }
 
 class _FilterPanelState extends State<FilterPanel> {
-  late NoteType? _selectedType;
   late List<String> _selectedTags;
   late String? _selectedColor;
   late DateTime? _startDate;
@@ -45,7 +43,6 @@ class _FilterPanelState extends State<FilterPanel> {
   @override
   void initState() {
     super.initState();
-    _selectedType = widget.currentFilter.type;
     _selectedTags = List.from(widget.currentFilter.tags ?? []);
     _selectedColor = widget.currentFilter.color;
     _startDate = widget.currentFilter.startDate;
@@ -55,7 +52,6 @@ class _FilterPanelState extends State<FilterPanel> {
 
   int get _activeFilterCount {
     int count = 0;
-    if (_selectedType != null) count++;
     if (_selectedTags.isNotEmpty) count++;
     if (_selectedColor != null) count++;
     if (_startDate != null || _endDate != null) count++;
@@ -64,7 +60,6 @@ class _FilterPanelState extends State<FilterPanel> {
 
   void _applyFilters() {
     widget.onFilterChanged(NoteFilter(
-      type: _selectedType,
       tags: _selectedTags.isEmpty ? null : _selectedTags,
       color: _selectedColor,
       startDate: _startDate,
@@ -76,7 +71,6 @@ class _FilterPanelState extends State<FilterPanel> {
 
   void _clearFilters() {
     setState(() {
-      _selectedType = null;
       _selectedTags = [];
       _selectedColor = null;
       _startDate = null;
@@ -111,15 +105,11 @@ class _FilterPanelState extends State<FilterPanel> {
 
   Future<void> _pickCustomDateRange() async {
     if (PlatformUtils.isIOS) {
-      // Use simple date pickers for iOS
       final start = await _showCupertinoDatePicker(_startDate ?? DateTime.now());
       if (start != null) {
         final end = await _showCupertinoDatePicker(_endDate ?? DateTime.now());
         if (end != null) {
-          setState(() {
-            _startDate = start;
-            _endDate = end;
-          });
+          setState(() { _startDate = start; _endDate = end; });
         }
       }
     } else {
@@ -128,14 +118,10 @@ class _FilterPanelState extends State<FilterPanel> {
         firstDate: DateTime(2020),
         lastDate: DateTime.now(),
         initialDateRange: _startDate != null && _endDate != null
-            ? DateTimeRange(start: _startDate!, end: _endDate!)
-            : null,
+            ? DateTimeRange(start: _startDate!, end: _endDate!) : null,
       );
       if (range != null) {
-        setState(() {
-          _startDate = range.start;
-          _endDate = range.end;
-        });
+        setState(() { _startDate = range.start; _endDate = range.end; });
       }
     }
   }
@@ -152,7 +138,8 @@ class _FilterPanelState extends State<FilterPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
+                CupertinoButton(child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context)),
                 CupertinoButton(child: const Text('Done'), onPressed: () {
                   picked ??= initial;
                   Navigator.pop(context);
@@ -189,23 +176,12 @@ class _FilterPanelState extends State<FilterPanel> {
               Row(
                 children: [
                   if (_activeFilterCount > 0)
-                    TextButton(onPressed: _clearFilters, child: const Text('Clear All')),
-                  FilledButton(onPressed: _applyFilters, child: const Text('Apply')),
+                    TextButton(onPressed: _clearFilters,
+                        child: const Text('Clear All')),
+                  FilledButton(onPressed: _applyFilters,
+                      child: const Text('Apply')),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Note type filter
-          Text('Note Type', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              FilterChip(label: const Text('All'), selected: _selectedType == null, onSelected: (_) => setState(() => _selectedType = null)),
-              FilterChip(label: const Text('Sermon'), selected: _selectedType == NoteType.sermon, onSelected: (_) => setState(() => _selectedType = _selectedType == NoteType.sermon ? null : NoteType.sermon)),
-              FilterChip(label: const Text('Journal'), selected: _selectedType == NoteType.journal, onSelected: (_) => setState(() => _selectedType = _selectedType == NoteType.journal ? null : NoteType.journal)),
             ],
           ),
           const SizedBox(height: 16),
@@ -218,13 +194,15 @@ class _FilterPanelState extends State<FilterPanel> {
             children: _colors.map((c) {
               final isSelected = _selectedColor == c['hex'];
               return GestureDetector(
-                onTap: () => setState(() => _selectedColor = isSelected ? null : c['hex']),
+                onTap: () => setState(() =>
+                    _selectedColor = isSelected ? null : c['hex']),
                 child: Container(
                   width: 32, height: 32,
                   decoration: BoxDecoration(
                     color: c['color'] as Color,
                     shape: BoxShape.circle,
-                    border: isSelected ? Border.all(color: Colors.black, width: 3) : null,
+                    border: isSelected
+                        ? Border.all(color: Colors.black, width: 3) : null,
                   ),
                 ),
               );
@@ -237,15 +215,16 @@ class _FilterPanelState extends State<FilterPanel> {
             Text('Tags', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 8,
-              runSpacing: 4,
+              spacing: 8, runSpacing: 4,
               children: widget.availableTags.map((tag) {
                 final isSelected = _selectedTags.contains(tag);
                 return FilterChip(
                   label: Text(tag),
                   selected: isSelected,
                   onSelected: (_) => setState(() {
-                    isSelected ? _selectedTags.remove(tag) : _selectedTags.add(tag);
+                    isSelected
+                        ? _selectedTags.remove(tag)
+                        : _selectedTags.add(tag);
                   }),
                 );
               }).toList(),
@@ -257,21 +236,26 @@ class _FilterPanelState extends State<FilterPanel> {
           Text('Date Range', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: 8, runSpacing: 4,
             children: [
-              ActionChip(label: const Text('Today'), onPressed: () => _selectDatePreset('today')),
-              ActionChip(label: const Text('This Week'), onPressed: () => _selectDatePreset('week')),
-              ActionChip(label: const Text('This Month'), onPressed: () => _selectDatePreset('month')),
-              ActionChip(label: const Text('This Year'), onPressed: () => _selectDatePreset('year')),
-              ActionChip(label: const Text('Custom...'), onPressed: _pickCustomDateRange),
+              ActionChip(label: const Text('Today'),
+                  onPressed: () => _selectDatePreset('today')),
+              ActionChip(label: const Text('This Week'),
+                  onPressed: () => _selectDatePreset('week')),
+              ActionChip(label: const Text('This Month'),
+                  onPressed: () => _selectDatePreset('month')),
+              ActionChip(label: const Text('This Year'),
+                  onPressed: () => _selectDatePreset('year')),
+              ActionChip(label: const Text('Custom...'),
+                  onPressed: _pickCustomDateRange),
             ],
           ),
           if (_startDate != null || _endDate != null) ...[
             const SizedBox(height: 8),
             Text(
               '${_startDate != null ? DateFormat('MMM d, yyyy').format(_startDate!) : '...'} — ${_endDate != null ? DateFormat('MMM d, yyyy').format(_endDate!) : '...'}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.primary),
             ),
           ],
           const SizedBox(height: 16),

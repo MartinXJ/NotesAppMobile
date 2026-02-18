@@ -1,4 +1,5 @@
 /// Validation utilities for task creation and editing
+library;
 
 /// Returns an error message if the title is invalid, null if valid.
 String? validateTaskTitle(String? title) {

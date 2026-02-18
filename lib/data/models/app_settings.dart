@@ -33,4 +33,7 @@ class AppSettings {
 
   /// Google account ID
   String? googleAccountId;
+
+  /// Whether notes migration from SermonNote/JournalNote to Note is complete
+  bool notesMigrationComplete = false;
 }

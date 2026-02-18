@@ -1,23 +1,21 @@
 import 'package:isar/isar.dart';
 import '../../data/database/isar_service.dart';
-import '../../data/models/sermon_note.dart';
-import '../../data/models/journal_note.dart';
+import '../../data/models/note.dart';
+import '../../core/utils/note_utils.dart';
 
 /// Result wrapper for search results
 class SearchResult {
   final int id;
-  final String title;
-  final String content;
+  final String displayTitle;
+  final String contentPreview;
   final DateTime modifiedAt;
-  final bool isSermon;
   final int relevanceScore;
 
   SearchResult({
     required this.id,
-    required this.title,
-    required this.content,
+    required this.displayTitle,
+    required this.contentPreview,
     required this.modifiedAt,
-    required this.isSermon,
     required this.relevanceScore,
   });
 }
@@ -36,53 +34,30 @@ class SearchService {
     final lowerQuery = query.toLowerCase();
     final results = <SearchResult>[];
 
-    // Search sermon notes
-    final sermonNotes = await isar.sermonNotes
+    final notes = await isar.notes
         .filter()
         .isDeletedEqualTo(false)
         .findAll();
 
-    for (final note in sermonNotes) {
+    for (final note in notes) {
+      final title = getDisplayTitle(note);
       final score = _calculateRelevance(
-        note.title,
+        title,
         note.plainTextContent,
         note.tags,
         lowerQuery,
       );
 
       if (score > 0) {
+        final preview = note.plainTextContent.length > 100
+            ? '${note.plainTextContent.substring(0, 100)}...'
+            : note.plainTextContent;
+
         results.add(SearchResult(
           id: note.id,
-          title: note.title,
-          content: note.plainTextContent,
+          displayTitle: title,
+          contentPreview: preview.isEmpty ? 'No content' : preview,
           modifiedAt: note.modifiedAt,
-          isSermon: true,
-          relevanceScore: score,
-        ));
-      }
-    }
-
-    // Search journal notes
-    final journalNotes = await isar.journalNotes
-        .filter()
-        .isDeletedEqualTo(false)
-        .findAll();
-
-    for (final note in journalNotes) {
-      final score = _calculateRelevance(
-        note.title,
-        note.plainTextContent,
-        note.tags,
-        lowerQuery,
-      );
-
-      if (score > 0) {
-        results.add(SearchResult(
-          id: note.id,
-          title: note.title,
-          content: note.plainTextContent,
-          modifiedAt: note.modifiedAt,
-          isSermon: false,
           relevanceScore: score,
         ));
       }
@@ -110,19 +85,16 @@ class SearchService {
   ) {
     int score = 0;
 
-    // Check title match (highest priority)
     if (title.toLowerCase().contains(query)) {
       score += 10;
     }
 
-    // Check tag matches
     for (final tag in tags) {
       if (tag.toLowerCase().contains(query)) {
         score += 5;
       }
     }
 
-    // Check content match
     if (content.toLowerCase().contains(query)) {
       score += 1;
     }

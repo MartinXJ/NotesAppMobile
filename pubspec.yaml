@@ -2,7 +2,7 @@ name: solo_notes
 description: "SoloNotes - Cross-platform notes app for sermons and journaling with offline-first functionality"
 publish_to: 'none'
 
-version: 1.0.1
+version: 1.1.0
 
 environment:
   sdk: ^3.10.4

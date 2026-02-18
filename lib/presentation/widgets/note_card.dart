@@ -1,31 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../../core/utils/platform_utils.dart';
-import '../../data/models/enums.dart';
 import 'package:intl/intl.dart';
 
-/// Note card widget for displaying note in list
+/// Note card widget for displaying a unified note in the list
 class NoteCard extends StatefulWidget {
   final int id;
-  final String title;
+  final String displayTitle;
   final String preview;
   final DateTime modifiedAt;
-  final DateTime? sermonDate;
+  final DateTime? date;
   final String colorHex;
   final List<String> tags;
-  final NoteType noteType;
   final VoidCallback onTap;
 
   const NoteCard({
     super.key,
     required this.id,
-    required this.title,
+    required this.displayTitle,
     required this.preview,
     required this.modifiedAt,
-    this.sermonDate,
+    this.date,
     required this.colorHex,
     required this.tags,
-    required this.noteType,
     required this.onTap,
   });
 
@@ -40,7 +37,9 @@ class _NoteCardState extends State<NoteCard> {
   Widget build(BuildContext context) {
     final color = _parseColor(widget.colorHex);
     final dateStr = DateFormat('MMM d, yyyy').format(widget.modifiedAt);
-    final sermonDateStr = widget.sermonDate != null ? DateFormat('MMM d, yyyy').format(widget.sermonDate!) : null;
+    final noteDateStr = widget.date != null
+        ? DateFormat('MMM d, yyyy').format(widget.date!)
+        : null;
 
     if (PlatformUtils.isIOS) {
       return CupertinoButton(
@@ -59,24 +58,17 @@ class _NoteCardState extends State<NoteCard> {
             children: [
               Row(
                 children: [
-                  Icon(
-                    widget.noteType == NoteType.sermon
-                        ? CupertinoIcons.book
-                        : CupertinoIcons.doc_text,
-                    size: 16,
-                    color: CupertinoColors.systemGrey,
-                  ),
+                  const Icon(CupertinoIcons.doc_text, size: 16,
+                      color: CupertinoColors.systemGrey),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.title.isEmpty ? 'Untitled' : widget.title,
+                      widget.displayTitle,
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 18, fontWeight: FontWeight.bold,
                         color: CupertinoColors.label,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -86,10 +78,8 @@ class _NoteCardState extends State<NoteCard> {
                 onTap: () => setState(() => _expanded = !_expanded),
                 child: Text(
                   widget.preview,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.secondaryLabel,
-                  ),
+                  style: const TextStyle(fontSize: 14,
+                      color: CupertinoColors.secondaryLabel),
                   maxLines: _expanded ? 10 : 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -98,25 +88,23 @@ class _NoteCardState extends State<NoteCard> {
               Row(
                 children: [
                   Text(
-                    sermonDateStr != null ? 'Sermon: $sermonDateStr' : dateStr,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: CupertinoColors.tertiaryLabel,
-                    ),
+                    noteDateStr ?? dateStr,
+                    style: const TextStyle(fontSize: 12,
+                        color: CupertinoColors.tertiaryLabel),
                   ),
-                  if (sermonDateStr != null) ...[
+                  if (noteDateStr != null) ...[
                     const SizedBox(width: 8),
-                    Text(
-                      'Modified: $dateStr',
-                      style: const TextStyle(fontSize: 10, color: CupertinoColors.tertiaryLabel),
-                    ),
+                    Text('Modified: $dateStr',
+                        style: const TextStyle(fontSize: 10,
+                            color: CupertinoColors.tertiaryLabel)),
                   ],
                   if (widget.tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       child: Wrap(
                         spacing: 4,
-                        children: widget.tags.take(3).map((tag) => _buildTag(tag, true)).toList(),
+                        children: widget.tags.take(3)
+                            .map((tag) => _buildTag(tag, true)).toList(),
                       ),
                     ),
                   ],
@@ -145,20 +133,15 @@ class _NoteCardState extends State<NoteCard> {
             children: [
               Row(
                 children: [
-                  Icon(
-                    widget.noteType == NoteType.sermon ? Icons.book : Icons.note,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
+                  Icon(Icons.note, size: 16,
+                      color: Theme.of(context).colorScheme.secondary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.title.isEmpty ? 'Untitled' : widget.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      widget.displayTitle,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -177,22 +160,22 @@ class _NoteCardState extends State<NoteCard> {
               Row(
                 children: [
                   Text(
-                    sermonDateStr != null ? 'Sermon: $sermonDateStr' : dateStr,
+                    noteDateStr ?? dateStr,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (sermonDateStr != null) ...[
+                  if (noteDateStr != null) ...[
                     const SizedBox(width: 8),
-                    Text(
-                      'Modified: $dateStr',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
-                    ),
+                    Text('Modified: $dateStr',
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(fontSize: 10)),
                   ],
                   if (widget.tags.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       child: Wrap(
                         spacing: 4,
-                        children: widget.tags.take(3).map((tag) => _buildTag(tag, false)).toList(),
+                        children: widget.tags.take(3)
+                            .map((tag) => _buildTag(tag, false)).toList(),
                       ),
                     ),
                   ],
@@ -213,16 +196,11 @@ class _NoteCardState extends State<NoteCard> {
           color: CupertinoColors.systemGrey5,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          tag,
-          style: const TextStyle(
-            fontSize: 10,
-            color: CupertinoColors.secondaryLabel,
-          ),
-        ),
+        child: Text(tag,
+            style: const TextStyle(fontSize: 10,
+                color: CupertinoColors.secondaryLabel)),
       );
     }
-
     return Chip(
       label: Text(tag),
       labelStyle: const TextStyle(fontSize: 10),
