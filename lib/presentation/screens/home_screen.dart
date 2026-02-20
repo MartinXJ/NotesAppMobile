@@ -12,6 +12,9 @@ import '../../domain/repositories/note_repository.dart';
 import '../../data/models/note.dart';
 import '../../data/models/note_template.dart';
 import '../../data/models/enums.dart';
+import '../../data/models/app_settings.dart';
+import '../../data/database/isar_service.dart';
+import '../../data/services/media_service.dart';
 import '../widgets/note_card.dart';
 import '../widgets/filter_panel.dart';
 import 'note_editor_screen.dart';
@@ -554,47 +557,113 @@ class _SearchViewState extends State<SearchView> {
 }
 
 /// Settings view
-class SettingsView extends StatelessWidget {
+class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    if (PlatformUtils.isIOS) {
-      return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(middle: Text('Settings')),
-        child: SafeArea(
-          child: ListView(
-            children: [
-              CupertinoListSection.insetGrouped(
-                header: const Text('APPEARANCE'),
-                children: [
-                  CupertinoListTile(
-                    title: const Text('Theme'),
-                    trailing: const CupertinoListTileChevron(),
-                    onTap: () => _showThemeDialog(context),
-                  ),
-                ],
-              ),
-              CupertinoListSection.insetGrouped(
-                header: const Text('SYNC'),
-                children: [
-                  CupertinoListTile(
-                    title: const Text('Google Account'),
-                    trailing: const CupertinoListTileChevron(),
-                    onTap: () {},
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+  State<SettingsView> createState() => _SettingsViewState();
+}
 
+class _SettingsViewState extends State<SettingsView> {
+  int _storageBytes = 0;
+  int _storageLimitMb = 0; // 0 = unlimited
+  bool _loadingStorage = true;
+
+  static const _limitOptions = [0, 256, 512, 1024, 2048];
+  static const _limitLabels = ['Unlimited', '256 MB', '512 MB', '1 GB', '2 GB'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStorage();
+  }
+
+  Future<void> _loadStorage() async {
+    final bytes = await MediaService.getCurrentStorageBytes();
+    // Load saved limit from AppSettings
+    final isar = await IsarService.getInstance();
+    final settings = await isar.appSettings.get(1);
+    if (mounted) {
+      setState(() {
+        _storageBytes = bytes;
+        _storageLimitMb = settings?.storageLimitMb ?? 0;
+        _loadingStorage = false;
+      });
+    }
+  }
+
+  Future<void> _saveLimit(int limitMb) async {
+    setState(() => _storageLimitMb = limitMb);
+    final isar = await IsarService.getInstance();
+    await isar.writeTxn(() async {
+      var settings = await isar.appSettings.get(1);
+      settings ??= AppSettings()
+        ..themeMode = AppThemeMode.system
+        ..autoSync = false
+        ..syncIntervalMinutes = 30
+        ..defaultNoteColor = '#FF9E9E9E'
+        ..fontSize = 16.0;
+      settings.storageLimitMb = limitMb;
+      await isar.appSettings.put(settings);
+    });
+  }
+
+  String get _usageText {
+    if (_loadingStorage) return 'Calculating...';
+    final used = MediaService.formatBytes(_storageBytes);
+    if (_storageLimitMb == 0) return '$used used (no limit)';
+    final limitBytes = _storageLimitMb * 1024 * 1024;
+    final pct = (_storageBytes / limitBytes * 100).clamp(0, 100).toStringAsFixed(0);
+    return '$used of ${_limitLabels[_limitOptions.indexOf(_storageLimitMb)]} used ($pct%)';
+  }
+
+  double get _usageProgress {
+    if (_storageLimitMb == 0 || _storageBytes == 0) return 0;
+    final limitBytes = _storageLimitMb * 1024 * 1024;
+    return (_storageBytes / limitBytes).clamp(0.0, 1.0);
+  }
+
+  Color _progressColor(BuildContext context) {
+    if (_usageProgress >= 0.9) return Colors.red;
+    if (_usageProgress >= 0.7) return Colors.orange;
+    return Theme.of(context).colorScheme.primary;
+  }
+
+  void _showLimitPicker(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Storage Limit'),
+        children: List.generate(_limitOptions.length, (i) {
+          return SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _saveLimit(_limitOptions[i]);
+            },
+            child: Row(
+              children: [
+                if (_storageLimitMb == _limitOptions[i])
+                  const Icon(Icons.check, size: 18)
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Text(_limitLabels[i]),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          // --- Appearance ---
+          const _SectionHeader(title: 'Appearance'),
           ListTile(
             leading: const Icon(Icons.palette),
             title: const Text('Theme'),
@@ -602,6 +671,51 @@ class SettingsView extends StatelessWidget {
             onTap: () => _showThemeDialog(context),
           ),
           const Divider(),
+
+          // --- Storage ---
+          const _SectionHeader(title: 'Storage'),
+          ListTile(
+            leading: const Icon(Icons.storage),
+            title: const Text('Media Storage'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_usageText),
+                if (_storageLimitMb > 0) ...[
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _usageProgress,
+                      minHeight: 6,
+                      backgroundColor: Colors.grey[300],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          _progressColor(context)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            isThreeLine: _storageLimitMb > 0,
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+              onPressed: _loadStorage,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.data_usage),
+            title: const Text('Storage Limit'),
+            subtitle: Text(_storageLimitMb == 0
+                ? 'Unlimited'
+                : _limitLabels[_limitOptions.indexOf(_storageLimitMb)]),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showLimitPicker(context),
+          ),
+          const Divider(),
+
+          // --- Sync ---
+          const _SectionHeader(title: 'Sync'),
           ListTile(
             leading: const Icon(Icons.account_circle),
             title: const Text('Google Account'),
@@ -615,71 +729,52 @@ class SettingsView extends StatelessWidget {
 
   void _showThemeDialog(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context, listen: false);
-
-    if (PlatformUtils.isIOS) {
-      showCupertinoModalPopup(
-        context: context,
-        builder: (context) => CupertinoActionSheet(
-          title: const Text('Choose Theme'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.light);
-                Navigator.pop(context);
-              },
-              child: const Text('Light'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.dark);
-                Navigator.pop(context);
-              },
-              child: const Text('Dark'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.system);
-                Navigator.pop(context);
-              },
-              child: const Text('System'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Choose Theme'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () {
+              themeService.setThemeMode(AppThemeMode.light);
+              Navigator.pop(context);
+            },
+            child: const Text('Light'),
           ),
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Choose Theme'),
-          children: [
-            SimpleDialogOption(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.light);
-                Navigator.pop(context);
-              },
-              child: const Text('Light'),
-            ),
-            SimpleDialogOption(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.dark);
-                Navigator.pop(context);
-              },
-              child: const Text('Dark'),
-            ),
-            SimpleDialogOption(
-              onPressed: () {
-                themeService.setThemeMode(AppThemeMode.system);
-                Navigator.pop(context);
-              },
-              child: const Text('System'),
-            ),
-          ],
-        ),
-      );
-    }
+          SimpleDialogOption(
+            onPressed: () {
+              themeService.setThemeMode(AppThemeMode.dark);
+              Navigator.pop(context);
+            },
+            child: const Text('Dark'),
+          ),
+          SimpleDialogOption(
+            onPressed: () {
+              themeService.setThemeMode(AppThemeMode.system);
+              Navigator.pop(context);
+            },
+            child: const Text('System'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(title,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.primary,
+              letterSpacing: 0.8)),
+    );
   }
 }

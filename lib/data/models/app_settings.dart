@@ -36,4 +36,7 @@ class AppSettings {
 
   /// Whether notes migration from SermonNote/JournalNote to Note is complete
   bool notesMigrationComplete = false;
+
+  /// Media storage limit in MB (0 = unlimited)
+  int storageLimitMb = 0;
 }

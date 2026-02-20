@@ -9,6 +9,9 @@ import '../../core/utils/platform_utils.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../../data/models/note.dart';
 import '../../data/models/note_template.dart';
+import '../../data/models/media_attachment.dart';
+import '../../data/services/media_service.dart';
+import '../widgets/media_gallery_widget.dart';
 
 /// Note editor screen with preview/edit mode and overflow menu
 class NoteEditorScreen extends StatefulWidget {
@@ -37,6 +40,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   DateTime? _date;
   String _colorHex = '#FF9E9E9E';
   List<String> _tags = [];
+  List<MediaAttachment> _mediaAttachments = [];
   int? _savedNoteId;
 
   // Template info for new notes
@@ -108,6 +112,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       _colorHex = note.colorHex;
       _tags = List.from(note.tags);
       _date = note.date;
+      _mediaAttachments = List.from(note.mediaAttachments);
 
       if (note.content.isNotEmpty) {
         try {
@@ -144,6 +149,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           ..colorHex = _colorHex
           ..tags = _tags
           ..date = _date
+          ..mediaAttachments = _mediaAttachments
           ..createdAt = DateTime.now()
           ..modifiedAt = DateTime.now()
           ..deviceId = ''
@@ -168,6 +174,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           note.colorHex = _colorHex;
           note.tags = _tags;
           note.date = _date;
+          note.mediaAttachments = _mediaAttachments;
           await repository.updateNote(note);
 
           if (showMessage && mounted) {
@@ -215,6 +222,28 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     }
   }
 
+  // --- Media actions ---
+
+  Future<void> _addMedia() async {
+    final picked = await MediaService.pickImages(maxCount: 9);
+    if (picked.isEmpty) return;
+    setState(() => _mediaAttachments.addAll(picked));
+    if (_savedNoteId != null) _saveNote(showMessage: false);
+  }
+
+  void _removeMedia(int index) async {
+    final attachment = _mediaAttachments[index];
+    setState(() => _mediaAttachments.removeAt(index));
+    await MediaService.deleteFile(attachment.localPath);
+    if (_savedNoteId != null) _saveNote(showMessage: false);
+  }
+
+  void _renameMedia(int index, String newName) {
+    final updated = MediaService.rename(_mediaAttachments[index], newName);
+    setState(() => _mediaAttachments[index] = updated);
+    if (_savedNoteId != null) _saveNote(showMessage: false);
+  }
+
   // --- Overflow menu actions ---
 
   void _showOverflowMenu() {
@@ -223,6 +252,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         context: context,
         builder: (context) => CupertinoActionSheet(
           actions: [
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _addMedia(); },
+              child: const Text('Add Media'),
+            ),
             CupertinoActionSheetAction(
               onPressed: () { Navigator.pop(context); _editTitle(); },
               child: const Text('Edit Title'),
@@ -258,6 +291,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Add Media'),
+                onTap: () { Navigator.pop(context); _addMedia(); },
+              ),
               ListTile(
                 leading: const Icon(Icons.title),
                 title: const Text('Edit Title'),
@@ -593,12 +631,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: QuillEditor.basic(
-            controller: _quillController,
-            config: const QuillEditorConfig(
-              showCursor: false,
-              enableInteractiveSelection: false,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_mediaAttachments.isNotEmpty)
+                MediaGalleryWidget(
+                  attachments: _mediaAttachments,
+                  isEditing: false,
+                  onAddMedia: () {},
+                  onRemove: (_) {},
+                  onRename: (_, _) {},
+                ),
+              QuillEditor.basic(
+                controller: _quillController,
+                config: const QuillEditorConfig(
+                  showCursor: false,
+                  enableInteractiveSelection: false,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -612,6 +663,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           config: const QuillSimpleToolbarConfig(),
         ),
         const SizedBox(height: 4),
+        // Media gallery
+        MediaGalleryWidget(
+          attachments: _mediaAttachments,
+          isEditing: true,
+          onAddMedia: _addMedia,
+          onRemove: _removeMedia,
+          onRename: _renameMedia,
+        ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

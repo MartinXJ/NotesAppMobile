@@ -6,7 +6,7 @@ part 'media_attachment.g.dart';
 /// Embedded model for media attachments in notes
 @embedded
 class MediaAttachment {
-  /// Local file path
+  /// Local file path (copied into app storage)
   late String localPath;
 
   /// Remote path (Google Drive file ID)
@@ -15,6 +15,9 @@ class MediaAttachment {
   /// Type of media (image or sticker)
   @enumerated
   late MediaType type;
+
+  /// User-facing display name (optional rename)
+  String? displayName;
 
   /// X position in note
   late double positionX;
