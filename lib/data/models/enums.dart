@@ -9,6 +9,13 @@ enum AppThemeMode {
   light,
   dark,
   system,
+  matte,
+  panda,
+  rosePink,
+  forest,
+  crimson,
+  midnight,
+  skyBlue,
 }
 
 /// Priority level for tasks

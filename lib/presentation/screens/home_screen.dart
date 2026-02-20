@@ -12,6 +12,7 @@ import '../../domain/repositories/note_repository.dart';
 import '../../data/models/note.dart';
 import '../../data/models/note_template.dart';
 import '../../data/models/enums.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/database/isar_service.dart';
 import '../../data/services/media_service.dart';
@@ -667,8 +668,9 @@ class _SettingsViewState extends State<SettingsView> {
           ListTile(
             leading: const Icon(Icons.palette),
             title: const Text('Theme'),
-            subtitle: const Text('Light, Dark, or System'),
-            onTap: () => _showThemeDialog(context),
+            subtitle: Text(_currentThemeName(context)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showThemePicker(context),
           ),
           const Divider(),
 
@@ -727,35 +729,150 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _showThemeDialog(BuildContext context) {
+  String _currentThemeName(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context, listen: false);
-    showDialog(
+    final current = AppTheme.allThemes.firstWhere(
+      (t) => t.mode == themeService.themeMode,
+      orElse: () => AppTheme.allThemes.first,
+    );
+    return current.name;
+  }
+
+  void _showThemePicker(BuildContext context) {
+    final themeService = Provider.of<ThemeService>(context, listen: false);
+    showModalBottomSheet(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Choose Theme'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () {
-              themeService.setThemeMode(AppThemeMode.light);
-              Navigator.pop(context);
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, scrollController) {
+          return StatefulBuilder(
+            builder: (ctx, setSheetState) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      children: [
+                        Text('Choose Theme',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: GridView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 1.3,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                      ),
+                      itemCount: AppTheme.allThemes.length,
+                      itemBuilder: (ctx, i) {
+                        final theme = AppTheme.allThemes[i];
+                        final isSelected =
+                            themeService.themeMode == theme.mode;
+                        final bg = theme.previewColors[0];
+                        final fg = theme.previewColors[1];
+                        final accent = theme.previewColors[2];
+
+                        return GestureDetector(
+                          onTap: () {
+                            themeService.setThemeMode(theme.mode);
+                            setSheetState(() {});
+                            setState(() {});
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? accent
+                                    : fg.withValues(alpha: 0.15),
+                                width: isSelected ? 2.5 : 1,
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Top row: icon + check
+                                Row(
+                                  children: [
+                                    Icon(theme.icon,
+                                        size: 20, color: accent),
+                                    const Spacer(),
+                                    if (isSelected)
+                                      Icon(Icons.check_circle,
+                                          size: 18, color: accent),
+                                  ],
+                                ),
+                                const Spacer(),
+                                // Mini preview lines
+                                Container(
+                                  height: 4,
+                                  width: 60,
+                                  decoration: BoxDecoration(
+                                    color: fg.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  height: 3,
+                                  width: 40,
+                                  decoration: BoxDecoration(
+                                    color: accent.withValues(alpha: 0.6),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  height: 3,
+                                  width: 50,
+                                  decoration: BoxDecoration(
+                                    color: fg.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const Spacer(),
+                                // Name + description
+                                Text(theme.name,
+                                    style: TextStyle(
+                                      color: fg,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                                Text(theme.description,
+                                    style: TextStyle(
+                                      color: fg.withValues(alpha: 0.6),
+                                      fontSize: 10,
+                                    )),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
             },
-            child: const Text('Light'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              themeService.setThemeMode(AppThemeMode.dark);
-              Navigator.pop(context);
-            },
-            child: const Text('Dark'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              themeService.setThemeMode(AppThemeMode.system);
-              Navigator.pop(context);
-            },
-            child: const Text('System'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

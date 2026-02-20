@@ -3,7 +3,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'core/theme/app_theme.dart';
 import 'core/theme/cupertino_theme.dart';
 import 'core/utils/platform_utils.dart';
 import 'presentation/screens/home_screen.dart';
@@ -85,9 +84,9 @@ class NotesApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'SoloNotes',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeService.flutterThemeMode,
+      theme: themeService.resolveTheme(
+        MediaQuery.platformBrightnessOf(context),
+      ),
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
