@@ -12,6 +12,7 @@ import '../../data/models/note_template.dart';
 import '../../data/models/media_attachment.dart';
 import '../../data/services/media_service.dart';
 import '../widgets/media_gallery_widget.dart';
+import '../widgets/sticker_picker_widget.dart';
 
 /// Note editor screen with preview/edit mode and overflow menu
 class NoteEditorScreen extends StatefulWidget {
@@ -244,6 +245,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (_savedNoteId != null) _saveNote(showMessage: false);
   }
 
+  void _showStickerPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scrollController) => StickerPickerWidget(
+          onStickerSelected: (sticker) {
+            setState(() => _mediaAttachments.add(sticker));
+            if (_savedNoteId != null) _saveNote(showMessage: false);
+          },
+        ),
+      ),
+    );
+  }
+
   // --- Overflow menu actions ---
 
   void _showOverflowMenu() {
@@ -255,6 +275,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             CupertinoActionSheetAction(
               onPressed: () { Navigator.pop(context); _addMedia(); },
               child: const Text('Add Media'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () { Navigator.pop(context); _showStickerPicker(); },
+              child: const Text('Add Sticker'),
             ),
             CupertinoActionSheetAction(
               onPressed: () { Navigator.pop(context); _editTitle(); },
@@ -295,6 +319,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 leading: const Icon(Icons.photo_library),
                 title: const Text('Add Media'),
                 onTap: () { Navigator.pop(context); _addMedia(); },
+              ),
+              ListTile(
+                leading: const Icon(Icons.emoji_emotions),
+                title: const Text('Add Sticker'),
+                onTap: () { Navigator.pop(context); _showStickerPicker(); },
               ),
               ListTile(
                 leading: const Icon(Icons.title),

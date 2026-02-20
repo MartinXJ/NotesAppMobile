@@ -101,29 +101,46 @@ class _MediaThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final file = File(attachment.localPath);
+    final isEmoji = attachment.localPath.startsWith('emoji:');
     final name = attachment.displayName ?? _shortName(attachment.localPath);
 
     return GestureDetector(
       onLongPress: isEditing ? () => _showOptions(context) : null,
-      onTap: () => _showFullImage(context, file),
+      onTap: isEmoji ? null : () => _showFullImage(context, file),
       child: Container(
         width: 80,
         height: 90,
         margin: const EdgeInsets.only(right: 8),
         child: Stack(
           children: [
-            // Image
+            // Image or emoji
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: file.existsSync()
-                  ? Image.file(file,
-                      width: 80, height: 80, fit: BoxFit.cover)
-                  : Container(
+              child: isEmoji
+                  ? Container(
                       width: 80,
                       height: 80,
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.broken_image, size: 32),
-                    ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        attachment.localPath.replaceFirst('emoji:', ''),
+                        style: const TextStyle(fontSize: 40),
+                      ),
+                    )
+                  : file.existsSync()
+                      ? Image.file(file,
+                          width: 80, height: 80, fit: BoxFit.cover)
+                      : Container(
+                          width: 80,
+                          height: 80,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, size: 32),
+                        ),
             ),
 
             // Remove button (edit mode)
