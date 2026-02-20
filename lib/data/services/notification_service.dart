@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import '../models/task.dart';
@@ -17,6 +18,9 @@ class NotificationService {
 
   static Future<void> initialize() async {
     tz_data.initializeTimeZones();
+    // Set local timezone so scheduled times are correct
+    final String timeZoneName = await _getLocalTimeZone();
+    tz.setLocalLocation(tz.getLocation(timeZoneName));
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -45,6 +49,21 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
+    // Request exact alarm permission (Android 12+ / Samsung One UI)
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestExactAlarmsPermission();
+  }
+
+  /// Get the local timezone name
+  static Future<String> _getLocalTimeZone() async {
+    try {
+      return await FlutterTimezone.getLocalTimezone();
+    } catch (_) {
+      return 'UTC';
+    }
   }
 
   static const _channelId = 'task_reminders';
@@ -57,8 +76,10 @@ class NotificationService {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        importance: Importance.high,
+        importance: Importance.max,
         priority: Priority.high,
+        enableVibration: true,
+        playSound: true,
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
@@ -81,7 +102,7 @@ class NotificationService {
         title,
         tz.TZDateTime.from(scheduledDate, tz.local),
         _notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: null,
       );
@@ -107,7 +128,7 @@ class NotificationService {
             title,
             tz.TZDateTime.from(baseTime, tz.local),
             _notificationDetails,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
             matchDateTimeComponents: DateTimeComponents.time,
           );
@@ -124,7 +145,7 @@ class NotificationService {
               title,
               tz.TZDateTime.from(nextDate, tz.local),
               _notificationDetails,
-              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
               uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
               matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
             );
@@ -138,7 +159,7 @@ class NotificationService {
             title,
             tz.TZDateTime.from(baseTime, tz.local),
             _notificationDetails,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
             matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
           );
@@ -151,7 +172,7 @@ class NotificationService {
             title,
             tz.TZDateTime.from(baseTime, tz.local),
             _notificationDetails,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
             matchDateTimeComponents: DateTimeComponents.dateAndTime,
           );
